@@ -1,0 +1,79 @@
+[project]
+name = "cvx"
+version = "0.1.0"
+description = "Resume PDF -> JSON extraction: Qwen3.5-4B (text) vs Qwen3-VL-4B (vision), QLoRA, evaluated through llama.cpp"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "pyyaml>=6.0.2",
+    "pydantic>=2.8",
+]
+
+[project.optional-dependencies]
+gen = [
+    # Stage 1: synthetic resumes. Pure CPU, no torch.
+    "datasets",
+    "faker>=30.0",
+    "jinja2>=3.1",
+    "weasyprint>=62",
+    "pypdfium2>=4.30",
+    "pdfplumber>=0.11",
+    "pillow>=10.4",
+    "httpx==0.28.1",
+]
+train = [
+    # Unsloth is the anchor; it tightly constrains transformers/trl/peft/datasets.
+    # Resolve those as a unit rather than pinning them independently (ADR 0010) --
+    # exact resolved versions are recorded in the committed uv.lock.
+    "torch>=2.8",
+    # Declared explicitly so that [tool.uv.sources] applies to it: source mappings only
+    # affect DIRECT dependencies. Qwen3-VL's processor also needs it directly.
+    "torchvision",
+    "unsloth",
+    "unsloth-zoo",
+    "trl",
+    "peft",
+    "transformers",
+    "datasets",
+    "bitsandbytes",
+    "accelerate",
+    "huggingface-hub>=0.34.0",
+    "pillow>=10.4",
+]
+eval = [
+    "httpx==0.28.1",
+]
+dev = [
+    "pytest>=8.3.0",
+    # Build tooling for llama.cpp, installed into the venv so the project needs no
+    # system packages beyond a C++ compiler and the CUDA toolkit.
+    "cmake>=3.28",
+    "ninja>=1.11",
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv]
+# triton JIT-compiles a C module at the first training step and needs Python.h. A distro
+# Python without its -dev package lacks it; uv's managed builds ship the headers.
+python-preference = "only-managed"
+
+[tool.uv.sources]
+# torchvision MUST come from the same index as torch: a torchvision built against a
+# different CUDA major version aborts the import.
+torch = { index = "pytorch-cu128" }
+torchvision = { index = "pytorch-cu128" }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cvx"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+markers = ["slow: requires downloading a tokenizer or processor"]

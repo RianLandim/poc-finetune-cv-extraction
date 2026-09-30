@@ -1,0 +1,55 @@
+# Text modality: pdfplumber text in, JSON out.
+
+model:
+  # TODO(phase 0): confirm the exact repo ids and that the pinned Unsloth and llama.cpp
+  # both support the Qwen3.5 architecture.
+  base_id: unsloth/Qwen3.5-4B
+  train_id: unsloth/Qwen3.5-4B-bnb-4bit
+  # A 2-page resume is ~1.5-2.5k tokens of text + ~600 of target. Measure in phase 1.
+  max_seq_length: 4096
+  load_in_4bit: true
+
+input:
+  modality: text
+
+lora:
+  r: 16
+  lora_alpha: 16
+  lora_dropout: 0.0
+  bias: none
+  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+  use_gradient_checkpointing: unsloth
+  random_state: 3407
+
+train:
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 16
+  group_by_length: true
+  num_train_epochs: 1
+  learning_rate: 2.0e-4
+  lr_scheduler_type: cosine
+  warmup_ratio: 0.03
+  optim: adamw_8bit
+  weight_decay: 0.01
+  logging_steps: 10
+  # Inherited lesson from the persona repo: an in-training eval pass materialises full
+  # fp32 logits and can OOM an 8GB card that trains fine. Re-measure before enabling.
+  eval_strategy: "no"
+  save_steps: 250
+  save_total_limit: 3
+  # Loss on the assistant turn only: the resume text is input, not something to learn.
+  train_on_responses_only: true
+  seed: 3407
+
+decode:
+  # Extraction is not creative: greedy.
+  temperature: 0.0
+  max_tokens: 1536
+
+serve:
+  ctx: 6144
+
+paths:
+  outputs_dir: outputs/qwen35-4b-text
+  gguf_dir: outputs/gguf
+  gguf_prefix: cvx-text

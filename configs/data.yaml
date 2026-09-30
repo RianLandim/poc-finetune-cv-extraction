@@ -1,0 +1,43 @@
+# Synthetic resume generation and splits, shared by both modalities (ADR 0002-0004).
+# Scripts must never hardcode a value that lives here.
+
+source:
+  hf_dataset: nvidia/Nemotron-Personas-Brazil
+  # Only adult personas with some work history make plausible resumes.
+  min_age: 18
+
+generate:
+  n_resumes: 6000          # one resume per persona (splits.py relies on this)
+  seed: 3407
+  # Probability that an optional field is rendered at all; hidden => null in the gold.
+  p_show:
+    email: 0.95
+    telefone: 0.9
+    linkedin: 0.4
+    resumo: 0.7
+    idiomas: 0.6
+  max_pages: 2
+  teacher:
+    # Writes only resumo/descricao (ADR 0003). Any llama-server GGUF works.
+    base_url: http://127.0.0.1:8080
+    temperature: 0.8
+    top_p: 0.9
+    max_tokens: 400
+
+templates:
+  # Every *.html.j2 in src/cvx/templates/ is a template; ids are file stems.
+  holdout_frac: 0.2        # whole templates reserved for test_unseen (ADR 0004)
+  fonts: [DejaVu Sans, Liberation Serif, Noto Sans, Carlito]
+
+splits:
+  val_frac: 0.05
+  test_frac: 0.05          # test_seen, on top of every test_unseen resume
+  seed: 3407
+
+smoke:
+  n_resumes: 200
+
+paths:
+  cvs_dir: data/cvs        # cv_000123.{json,pdf,txt} + -p1.png, -p2.png
+  datasets_dir: data/datasets
+  real_test_dir: data/real_test
