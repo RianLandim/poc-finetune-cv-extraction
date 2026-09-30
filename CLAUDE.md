@@ -16,11 +16,12 @@ over below.
 
 ## Status
 
-Skeleton. Implemented and tested: `schema`, `prompt`, `normalize`, `metrics`, `splits`,
-`config`. Every stage script and `generate/*` is a stub naming its phase:
+Implemented and tested: `schema`, `prompt`, `normalize`, `metrics`, `splits`, `config`.
+Every stage script and `generate/*` is a stub naming its phase:
 
-0. Spike: VRAM of both models, Qwen3.5/Qwen3-VL support in pinned Unsloth + llama.cpp,
-   images on raw `/completion` (ADR 0008, 0011).
+0. ~~Spike~~ — done 2026-09-30, see [`docs/spike/2026-09-30-phase0.md`](docs/spike/2026-09-30-phase0.md).
+   Both models fit; raw `/completion` takes images with token-exact parity. ADR 0012
+   (Qwen3.5-4B for both modalities) awaits a decision.
 1. Generator + 3 templates + `make smoke MOD=text`.
 2. 20+ templates, full Qwen3.5-4B run, eval + report.
 3. Vision path.
@@ -61,13 +62,28 @@ resumes; run it before any multi-hour training run. `make test` for the fast sui
    in the schema (ADR 0005).
 6. **Thinking mode off everywhere.** `enable_thinking=False`; any `<think>` in a
    generation is a format failure.
-7. **Raw `/completion` for text.** Vision endpoint pending the spike (ADR 0011).
+7. **Raw `/completion` for both modalities.** Images go through
+   `prompt.to_server_prompt` with the marker from `GET /props` (ADR 0011).
 8. **Base and tuned never run concurrently**, and go through the same merge → convert →
    quantise chain. Vision base and tuned share the base `mmproj` (frozen vision tower).
 9. **The text extractor is part of the input.** Same extractor, same settings, in
    training and eval.
 10. **Real resumes stay local.** `data/real_test/` is gitignored, never trained on, never
     sent to an external API (ADR 0009).
+
+## Operational gotchas found in phase 0
+
+- **llama-server's media marker is random per run.** `<__media__>` from the docs is
+  rejected with "number of media markers (0) does not match number of bitmaps". Read
+  `media_marker` from `GET /props`, or pin `LLAMA_MEDIA_MARKER`.
+- **Qwen3.5-4B has no pre-quantised bnb checkpoint**; Unsloth quantises the bf16 weights
+  at load. Linear-attention layers use the torch fallback unless `flash-linear-attention`
+  and `causal-conv1d` are installed — slower, but it fits and works.
+- **llama.cpp is pinned in the Makefile** (`LLAMA_COMMIT`). Bumping it means re-running
+  the spike's `completion_probe.py` and `parity_grammar.py`: conversion, the media marker
+  and image token parity all live in llama.cpp.
+- **Base Qwen3.5-4B + grammar already aces a clean resume.** The synthetic test set must
+  be hard (multi-column, tables, scan noise) or the A/B will show nothing.
 
 ## Operational gotchas carried over from the persona repo
 

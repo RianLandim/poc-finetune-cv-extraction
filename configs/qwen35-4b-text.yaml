@@ -1,10 +1,12 @@
 # Text modality: pdfplumber text in, JSON out.
 
 model:
-  # TODO(phase 0): confirm the exact repo ids and that the pinned Unsloth and llama.cpp
-  # both support the Qwen3.5 architecture.
+  # Natively multimodal (Qwen3_5ForConditionalGeneration), hybrid attention: 24 Gated
+  # DeltaNet + 8 full-attention layers, vocab 248k. No pre-quantised bnb checkpoint
+  # exists; Unsloth quantises the 9.3GB bf16 weights at load (3.2GB on GPU after load).
   base_id: unsloth/Qwen3.5-4B
-  train_id: unsloth/Qwen3.5-4B-bnb-4bit
+  train_id: unsloth/Qwen3.5-4B
+  # Phase 0: 3.7k tokens -> 5.2GB peak, 6.7k tokens -> 5.9GB peak (ADR 0008).
   # A 2-page resume is ~1.5-2.5k tokens of text + ~600 of target. Measure in phase 1.
   max_seq_length: 4096
   load_in_4bit: true

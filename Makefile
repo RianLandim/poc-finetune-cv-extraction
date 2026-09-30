@@ -2,6 +2,10 @@
 MOD      ?= text
 UV       ?= uv
 DATA_CFG ?= configs/data.yaml
+# llama.cpp commit verified in the phase 0 spike (docs/spike/2026-09-30-phase0.md).
+# Changing it means re-checking conversion, the media marker and image token parity.
+LLAMA_COMMIT ?= bdeb855b30dfe7f6e695cba98445a7ba09e6416e
+export LLAMA_COMMIT
 
 ifeq ($(MOD),text)
 CONFIG ?= configs/qwen35-4b-text.yaml

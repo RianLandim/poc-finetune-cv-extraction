@@ -26,6 +26,10 @@ SYSTEM_PROMPT = (
 
 INSTRUCTION = "Extraia o currículo para JSON."
 
+# What the Qwen3.5 / Qwen3-VL processors render for one {"type": "image"} item. The HF
+# processor later expands <|image_pad|> into one token per vision patch group.
+IMAGE_BLOCK = "<|vision_start|><|image_pad|><|vision_end|>"
+
 
 def _messages_text(cv_text: str) -> list[dict]:
     return [
@@ -61,6 +65,20 @@ def render_prompt(msgs: list[dict], template_owner) -> str:
     return template_owner.apply_chat_template(
         msgs, tokenize=False, add_generation_prompt=True, enable_thinking=False
     )
+
+
+def to_server_prompt(prompt: str, media_marker: str) -> str:
+    """The same prompt, in the form llama-server's raw /completion expects (ADR 0011).
+
+    llama.cpp's mtmd inserts <|vision_start|>/<|vision_end|> around each image itself, so
+    the whole HF image block becomes one media marker. The marker is randomised per
+    server run; read it from GET /props ("media_marker"). Phase 0 measured the result
+    token-identical to the HF processor's input (docs/spike/2026-09-30-phase0.md).
+    """
+    n_images = prompt.count(IMAGE_BLOCK)
+    if n_images == 0 and "<|image_pad|>" in prompt:
+        raise ValueError("prompt has an image pad outside the expected image block")
+    return prompt.replace(IMAGE_BLOCK, media_marker)
 
 
 def render_training_text(msgs: list[dict], cv: Curriculo, template_owner) -> str:

@@ -1,6 +1,6 @@
-# ADR 0011 — One prompt renderer; raw /completion (vision pending)
+# ADR 0011 — One prompt renderer; raw /completion for both modalities
 
-- **Status:** Proposed — vision endpoint pending phase 0
+- **Status:** Accepted — vision path verified in the phase 0 spike
 - **Date:** 2026-09-30
 
 ## Context
@@ -16,7 +16,12 @@ raw `/completion` with a prompt rendered by our own code.
   prompt, for both the tokenizer (text) and the processor (vision).
 - `enable_thinking=False` always; any `<think>` in a generation is a format failure.
 - Text: raw `/completion` only.
-- **Vision: open.** The spike must confirm the pinned llama-server accepts images on
-  `/completion` (multimodal data plus media markers in the raw prompt). If it does not,
-  a follow-up ADR accepts the chat endpoint for vision only, with parity checked by
-  comparing the server's rendered prompt against `render_prompt`.
+- **Vision: raw `/completion` too.** The body is
+  `{"prompt": {"prompt_string": …, "multimodal_data": [base64, …]}}`. The prompt string is
+  `render_prompt(...)` passed through `to_server_prompt(prompt, marker)`, which replaces
+  each HF image block with the server's media marker; mtmd re-inserts the vision
+  start/end tokens.
+- The marker is **randomised per server run**; read it from `GET /props`
+  (`media_marker`) on every eval run. Never hardcode `<__media__>`.
+- Phase 0 measured parity: 1,465 input tokens on both sides for a 1000×1400 page.
+  Re-check this count on any llama.cpp or processor upgrade.

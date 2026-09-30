@@ -1,6 +1,7 @@
 import pytest
 
 from cvx.prompt import (
+    IMAGE_BLOCK,
     PROMPT_VERSION,
     SYSTEM_PROMPT,
     manifest,
@@ -8,6 +9,7 @@ from cvx.prompt import (
     parse_generation,
     render_prompt,
     render_training_text,
+    to_server_prompt,
 )
 from cvx.schema import SCHEMA_VERSION, to_target
 
@@ -48,17 +50,22 @@ def test_parse_failures_are_classified(text, error):
     assert parse_generation(text) == (None, error)
 
 
-@pytest.fixture(scope="module")
-def tokenizer():
+def test_server_prompt_swaps_each_image_block_for_the_marker():
+    prompt = f"<|im_start|>user\n{IMAGE_BLOCK}{IMAGE_BLOCK}Extraia<|im_end|>"
+    out = to_server_prompt(prompt, "<__media_X__>")
+    assert out == "<|im_start|>user\n<__media_X__><__media_X__>Extraia<|im_end|>"
+
+
+# Qwen3.5-4B is natively multimodal: its processor serves both modalities.
+@pytest.fixture(scope="module", params=["unsloth/Qwen3.5-4B", "unsloth/Qwen3-VL-4B-Instruct"])
+def processor(request):
     transformers = pytest.importorskip("transformers")
-    # TODO(phase 0): switch to the confirmed Qwen3.5-4B id.
-    return transformers.AutoTokenizer.from_pretrained("unsloth/Qwen3-4B")
+    return transformers.AutoProcessor.from_pretrained(request.param)
 
 
 @pytest.fixture(scope="module")
-def processor():
-    transformers = pytest.importorskip("transformers")
-    return transformers.AutoProcessor.from_pretrained("unsloth/Qwen3-VL-4B-Instruct")
+def tokenizer(processor):
+    return processor.tokenizer
 
 
 @pytest.mark.slow
@@ -71,6 +78,11 @@ def test_text_training_text_starts_with_inference_prompt(tokenizer, cv):
 def test_vision_training_text_starts_with_inference_prompt(processor, cv):
     msgs = messages(n_pages=2)
     assert render_training_text(msgs, cv, processor).startswith(render_prompt(msgs, processor))
+
+
+@pytest.mark.slow
+def test_processor_renders_the_expected_image_block(processor):
+    assert render_prompt(messages(n_pages=2), processor).count(IMAGE_BLOCK) == 2
 
 
 @pytest.mark.slow
