@@ -172,9 +172,16 @@ def main() -> None:
     (out_dir / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=1),
                                            encoding="utf-8")
     print(json.dumps(manifest, ensure_ascii=False), flush=True)
+    # A teacher that dies mid-run does not fail a resume -- the prose is just dropped --
+    # so without this check half a dataset can silently lose its prose (2026-10-01).
+    teacher_errors = manifest["teacher"]["errors"]
+    if teacher_url and teacher_errors > 0.01 * max(1, len(teacher_calls)):
+        print(f"FATAL: {teacher_errors}/{len(teacher_calls)} teacher calls failed. Delete the "
+              "resumes whose meta has teacher.error and rerun with the teacher up.", flush=True)
     sys.stdout.flush()
     sys.stderr.flush()
-    os._exit(1 if failures else 0)
+    teacher_bad = teacher_url and teacher_errors > 0.01 * max(1, len(teacher_calls))
+    os._exit(1 if failures or teacher_bad else 0)
 
 
 if __name__ == "__main__":

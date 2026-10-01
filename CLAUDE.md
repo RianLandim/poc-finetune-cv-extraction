@@ -87,6 +87,9 @@ resumes; run it before any multi-hour training run. `make test` for the fast sui
   and image token parity all live in llama.cpp.
 - **Grammar schema must require every key** (ADR 0007): optional keys can be skipped but
   not reordered, so an out-of-order key silently empties earlier lists.
+- **A teacher outage does not fail generation by itself** — resumes just lose their prose.
+  `01_generate_cvs.py` now exits non-zero above 1% teacher errors; run the teacher detached
+  (`setsid nohup`), never as a tool background job with a default timeout.
 - **Small-caps text extracts garbled** in pdfplumber; never set it on scored values.
 - **Base Qwen3.5-4B + grammar already aces a clean resume.** The synthetic test set must
   be hard (multi-column, tables, scan noise) or the A/B will show nothing.
