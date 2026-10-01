@@ -1,0 +1,26 @@
+{#- Jobs as bordered cards, TWO PER ROW: extraction mixes the lines of two different
+    jobs (cargo of one beside cargo of the other). Education as cards too. -#}
+{% import "_macros.html.j2" as m %}
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><style>
+{{ m.base_css(style) }}
+h1 { font-size: 20pt; margin: 0; color: {{ style.accent }}; }
+.contact { margin: 1mm 0 4mm; color: #444; }
+h2 { font-size: 11.5pt; margin: 5mm 0 2mm; color: {{ style.accent }}; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm; }
+.grid .item { border: 1px solid #ccc; border-top: 3px solid {{ style.accent }}; padding: 2mm 3mm; margin: 0; }
+.grid .periodo { float: none; display: block; font-size: 9pt; }
+</style></head><body>
+<h1>{{ cv.nome }}</h1>
+<div class="contact">{{ m.contact(cv, fmt) }}</div>
+{% for section in style.section_order if m.has(cv, style, section) == "True" %}
+<h2>{{ style.headings[section] }}</h2>
+{% if section == "experiencias" %}
+<div class="grid">{% for e in cv.experiencias %}{{ m.experiencia(e, fmt, style) }}{% endfor %}</div>
+{% elif section == "formacao" %}
+<div class="grid">{% for f in cv.formacao %}{{ m.formacao(f, fmt, style) }}{% endfor %}</div>
+{% else %}
+{{ m.body(cv, fmt, style, section) }}
+{% endif %}
+{% endfor %}
+</body></html>

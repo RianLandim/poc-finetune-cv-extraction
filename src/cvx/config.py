@@ -49,3 +49,22 @@ def load_model_config(path: str | Path) -> SimpleNamespace:
     if cfg.input.modality not in ("text", "vision"):
         raise ValueError(f"input.modality must be 'text' or 'vision', got {cfg.input.modality!r}")
     return cfg
+
+
+def gguf_path(cfg: SimpleNamespace, which: str, run: str) -> Path:
+    """The quantised GGUF that stage 4 writes and stage 6 serves.
+
+    The base does not depend on the training run; the tuned model does.
+    """
+    if which not in ("base", "tuned"):
+        raise ValueError(f"which must be 'base' or 'tuned', got {which!r}")
+    tag = "base" if which == "base" else f"{run}-tuned"
+    quant = cfg.export.quant.lower()
+    return Path(cfg.paths.gguf_dir) / f"{cfg.paths.gguf_prefix}-{tag}-{quant}.gguf"
+
+
+def mmproj_path(cfg: SimpleNamespace) -> Path | None:
+    """The vision projector, exported once from the base (frozen tower, ADR 0012)."""
+    if cfg.input.modality != "vision":
+        return None
+    return Path(cfg.paths.gguf_dir) / f"{cfg.paths.gguf_prefix}-mmproj-f16.gguf"

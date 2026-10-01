@@ -1,0 +1,27 @@
+{#- Plain-text look: monospace font, ASCII headings, dates in brackets before the title.
+    The kind of resume pasted from a text editor or a developer's README. -#}
+{% import "_macros.html.j2" as m %}
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><style>
+{{ m.base_css(style) }}
+body { font-family: "{{ ["DejaVu Sans Mono", "JetBrains Mono", "Cousine"][style.font | length % 3] }}", monospace; font-size: 9pt; }
+h1 { font-size: 13pt; margin: 0; }
+.contact { margin: 1mm 0 3mm; }
+h2 { font-size: 10pt; margin: 4mm 0 1.5mm; }
+h2::before { content: "== "; } h2::after { content: " =="; }
+.exp .periodo { float: none; }
+.exp .periodo::before { content: "["; } .exp .periodo::after { content: "] "; }
+.item-head .periodo { margin-left: 3mm; }
+</style></head><body>
+<h1>{{ cv.nome | upper }}</h1>
+<div class="contact">{{ m.contact(cv, fmt, " / ") }}</div>
+{% for section in style.section_order if m.has(cv, style, section) == "True" %}
+<h2>{{ style.headings[section] | upper }}</h2>
+{% if section == "experiencias" %}
+{% for e in cv.experiencias %}<div class="item exp"><div class="item-head"><span class="periodo">{{ fmt.period(e.inicio, e.fim) }}</span><span class="titulo">{{ e.cargo }}</span> @ {{ e.empresa }}{% if e.cidade %} ({{ e.cidade }}){% endif %}</div>
+{% if e.descricao %}<p class="desc">{{ e.descricao }}</p>{% endif %}</div>{% endfor %}
+{% else %}
+{{ m.body(cv, fmt, style, section) }}
+{% endif %}
+{% endfor %}
+</body></html>

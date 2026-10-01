@@ -1,58 +1,17 @@
-{#- Single-column, sober layout. Reference template: every other one must render the
-    same fields from the same context, only arranged differently. -#}
+{#- One column, sober. Section order and headings come from the sampled style. -#}
+{% import "_macros.html.j2" as m %}
 <!doctype html>
-<html lang="pt-BR">
-<head>
-<meta charset="utf-8">
-<style>
-  @page { size: A4; margin: 18mm 16mm; }
-  body { font-family: {{ style.font }}, sans-serif; font-size: 10.5pt; color: #222; }
-  h1 { font-size: 20pt; margin: 0 0 2mm; }
-  h2 { font-size: 12pt; border-bottom: 1px solid #999; margin: 6mm 0 2mm; text-transform: uppercase; }
-  .contato { color: #555; }
-  .item { margin-bottom: 3mm; }
-  .item .titulo { font-weight: bold; }
-  .item .periodo { color: #666; float: right; }
-</style>
-</head>
-<body>
-  <h1>{{ cv.nome }}</h1>
-  <div class="contato">
-    {%- for part in [cv.email, fmt.phone(cv.telefone), fmt.city(cv.cidade, cv.uf), cv.linkedin] if part %}
-    {{ part }}{% if not loop.last %} · {% endif %}
-    {%- endfor %}
-  </div>
-
-  {% for section in style.section_order %}
-    {% if section == "resumo" and cv.resumo %}
-  <h2>Resumo</h2>
-  <p>{{ cv.resumo }}</p>
-    {% elif section == "experiencias" and cv.experiencias %}
-  <h2>Experiência profissional</h2>
-      {% for e in cv.experiencias %}
-  <div class="item">
-    <span class="periodo">{{ fmt.date(e.inicio) }} – {{ fmt.date(e.fim) }}</span>
-    <div class="titulo">{{ e.cargo }} — {{ e.empresa }}</div>
-    {% if e.cidade %}<div>{{ e.cidade }}</div>{% endif %}
-    {% if e.descricao %}<p>{{ e.descricao }}</p>{% endif %}
-  </div>
-      {% endfor %}
-    {% elif section == "formacao" and cv.formacao %}
-  <h2>Formação</h2>
-      {% for f in cv.formacao %}
-  <div class="item">
-    <span class="periodo">{{ fmt.date(f.conclusao) }}</span>
-    <div class="titulo">{{ f.curso }}</div>
-    <div>{{ f.instituicao }}</div>
-  </div>
-      {% endfor %}
-    {% elif section == "habilidades" and cv.habilidades %}
-  <h2>Habilidades</h2>
-  <p>{{ cv.habilidades | join(", ") }}</p>
-    {% elif section == "idiomas" and cv.idiomas %}
-  <h2>Idiomas</h2>
-  <p>{% for i in cv.idiomas %}{{ i.idioma }} ({{ fmt.language_level(i.nivel) }}){% if not loop.last %}; {% endif %}{% endfor %}</p>
-    {% endif %}
-  {% endfor %}
-</body>
-</html>
+<html lang="pt-BR"><head><meta charset="utf-8"><style>
+{{ m.base_css(style) }}
+h1 { font-size: 20pt; margin: 0 0 1mm; color: {{ style.accent }}; }
+.contact { color: #555; margin-bottom: 4mm; }
+h2 { font-size: 11.5pt; color: {{ style.accent }}; border-bottom: 1px solid {{ style.accent }};
+     margin: 5mm 0 2mm; text-transform: uppercase; letter-spacing: 0.5pt; }
+</style></head><body>
+<h1>{{ cv.nome }}</h1>
+<div class="contact">{{ m.contact(cv, fmt) }}</div>
+{% for section in style.section_order if m.has(cv, style, section) == "True" %}
+<h2>{{ style.headings[section] }}</h2>
+{{ m.body(cv, fmt, style, section) }}
+{% endfor %}
+</body></html>

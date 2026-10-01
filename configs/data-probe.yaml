@@ -1,3 +1,5 @@
+# Difficulty probe: smoke.run=probe, used by docs/probe/2026-10-01-templates.md.
+# python scripts/01_generate_cvs.py --config configs/data-probe.yaml --smoke [--templates a,b]
 # Synthetic resume generation and splits, shared by both modalities (ADR 0002-0004).
 # Scripts must never hardcode a value that lives here.
 
@@ -46,7 +48,7 @@ splits:
 
 smoke:
   n_resumes: 200
-  run: smoke
+  run: probe
 
 paths:
   cvs_dir: data/cvs        # <run>/cv_000123.{json,pdf,txt,meta.json} (+ -p1.png ...)

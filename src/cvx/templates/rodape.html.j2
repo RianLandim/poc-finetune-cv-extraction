@@ -1,0 +1,23 @@
+{#- One column with running page furniture: a header repeating the name, a footer with
+    "Atualizado em <date>" and page numbers. Both are noise outside the schema; the
+    update date must not leak into any experience. -#}
+{% import "_macros.html.j2" as m %}
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><style>
+{{ m.base_css(style) }}
+@page { margin: 22mm 15mm 20mm;
+  @top-left { content: "Currículo — {{ cv.nome }}"; font-size: 8pt; color: #888; }
+  @top-right { content: "{{ style.headings['experiencias'] }} · {{ style.headings['formacao'] }}"; font-size: 8pt; color: #888; }
+  @bottom-left { content: "Atualizado em {{ fmt.date('2026-09') }}"; font-size: 8pt; color: #888; }
+  @bottom-right { content: "Página " counter(page) " de " counter(pages); font-size: 8pt; color: #888; } }
+h1 { font-size: 20pt; margin: 0 0 1mm; }
+.contact { margin-bottom: 4mm; color: #444; }
+h2 { font-size: 11.5pt; margin: 5mm 0 2mm; color: {{ style.accent }}; border-bottom: 1px dotted {{ style.accent }}; }
+</style></head><body>
+<h1>{{ cv.nome }}</h1>
+<div class="contact">{{ m.contact(cv, fmt) }}</div>
+{% for section in style.section_order if m.has(cv, style, section) == "True" %}
+<h2>{{ style.headings[section] }}</h2>
+{{ m.body(cv, fmt, style, section) }}
+{% endfor %}
+</body></html>

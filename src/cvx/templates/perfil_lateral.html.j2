@@ -1,0 +1,42 @@
+{#- Dark sidebar holding the NAME, an initials badge, contact, education and languages;
+    the main column holds summary, experience, skills and extras. -#}
+{% import "_macros.html.j2" as m %}
+{% set side = ["formacao", "idiomas"] %}
+{% set contact = [cv.email, fmt.phone(cv.telefone), fmt.city(cv.cidade, cv.uf), cv.linkedin] | select | list %}
+{% set long_contact = contact | select("long_contact") | list %}
+{% set initials = cv.nome.split() | map("first") | list %}
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><style>
+{{ m.base_css(style) }}
+@page { margin: 0; }
+body { margin: 0; }
+.sidebar { float: left; width: 62mm; min-height: 297mm; padding: 12mm 6mm 10mm 7mm;
+           background: #2b2b2b; color: #eee; box-sizing: border-box; }
+.badge { width: 22mm; height: 22mm; border-radius: 50%; background: {{ style.accent }};
+         color: #fff; font-size: 16pt; line-height: 22mm; text-align: center; margin: 0 auto 4mm; }
+.sidebar h1 { font-size: 15pt; margin: 0 0 4mm; text-align: center; }
+.sidebar h2 { font-size: 10pt; color: #fff; border-bottom: 1px solid #777; margin: 5mm 0 2mm; text-transform: uppercase; }
+.sidebar .sub, .sidebar .periodo { color: #ccc; }
+.sidebar .periodo { float: none; display: block; font-size: 8.5pt; }
+.sidebar .contact-line { margin-bottom: 1.5mm; white-space: nowrap; font-size: 8.5pt; }
+.main { margin-left: 68mm; padding: 14mm 12mm 10mm 0; }
+.contact-main { margin: 0 0 3mm; color: #444; }
+.main h2 { font-size: 12pt; color: {{ style.accent }}; margin: 5mm 0 2mm; border-bottom: 1px solid #ddd; }
+</style></head><body>
+<div class="sidebar">
+  <div class="badge">{{ initials[0] }}{{ initials[-1] }}</div>
+  <h1>{{ cv.nome }}</h1>
+  {% for part in contact if part not in long_contact %}<div class="contact-line">{{ part }}</div>{% endfor %}
+  {% for section in style.section_order if section in side and m.has(cv, style, section) == "True" %}
+  <h2>{{ style.headings[section] }}</h2>
+  {{ m.body(cv, fmt, style, section) }}
+  {% endfor %}
+</div>
+<div class="main">
+  {% if long_contact %}<div class="contact-main">{% for part in long_contact %}{% if not loop.first %} · {% endif %}<span class="nobr">{{ part }}</span>{% endfor %}</div>{% endif %}
+  {% for section in style.section_order if section not in side and m.has(cv, style, section) == "True" %}
+  <h2>{{ style.headings[section] }}</h2>
+  {{ m.body(cv, fmt, style, section) }}
+  {% endfor %}
+</div>
+</body></html>

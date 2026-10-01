@@ -1,0 +1,44 @@
+{#- Two columns: a tinted sidebar (contact, skills, languages, extras) and a main column.
+    Text extraction reads these line by line across both columns, interleaving them --
+    exactly the difficulty real two-column resumes pose to the text modality. -#}
+{% import "_macros.html.j2" as m %}
+{% set side = ["habilidades", "idiomas", "extras"] %}
+{#- The sidebar holds ~26 characters per line. A longer contact item (a long email or
+    LinkedIn URL) goes under the name instead: real resumes never break an email. -#}
+{% set contact = [cv.email, fmt.phone(cv.telefone), fmt.city(cv.cidade, cv.uf), cv.linkedin] | select | list %}
+{% set long_contact = contact | select("long_contact") | list %}
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><style>
+{{ m.base_css(style) }}
+@page { margin: 0; }
+body { margin: 0; }
+.sidebar { float: left; width: 58mm; min-height: 297mm; padding: 14mm 6mm 10mm 8mm;
+           background: {{ style.accent }}; color: #fff; box-sizing: border-box; }
+.sidebar h2 { font-size: 10.5pt; border-bottom: 1px solid rgba(255,255,255,.5); margin: 5mm 0 2mm; text-transform: uppercase; }
+.sidebar .contact-line { margin-bottom: 1.5mm; white-space: nowrap; font-size: 8.5pt; }
+.contact-main { margin: -2mm 0 3mm; color: #444; }
+.sidebar ul { padding-left: 4mm; }
+.main { margin-left: 64mm; padding: 14mm 12mm 10mm 0; }
+h1 { font-size: 21pt; margin: 0 0 4mm; color: {{ style.accent }}; }
+.main h2 { font-size: 12pt; color: {{ style.accent }}; margin: 5mm 0 2mm; }
+.periodo { float: none; display: block; font-size: 9pt; }
+</style></head><body>
+<div class="sidebar">
+  <h2>Contato</h2>
+  {% for part in contact if part not in long_contact %}
+  <div class="contact-line">{{ part }}</div>
+  {% endfor %}
+  {% for section in style.section_order if section in side and m.has(cv, style, section) == "True" %}
+  <h2>{{ style.headings[section] }}</h2>
+  {{ m.body(cv, fmt, style, section) }}
+  {% endfor %}
+</div>
+<div class="main">
+  <h1>{{ cv.nome }}</h1>
+  {% if long_contact %}<div class="contact-main">{% for part in long_contact %}{% if not loop.first %} · {% endif %}<span class="nobr">{{ part }}</span>{% endfor %}</div>{% endif %}
+  {% for section in style.section_order if section not in side and m.has(cv, style, section) == "True" %}
+  <h2>{{ style.headings[section] }}</h2>
+  {{ m.body(cv, fmt, style, section) }}
+  {% endfor %}
+</div>
+</body></html>

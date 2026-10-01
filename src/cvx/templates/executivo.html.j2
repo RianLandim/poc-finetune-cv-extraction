@@ -1,0 +1,34 @@
+{#- Sober serif, small-caps headings (extraction garbles them; they are not scored). Each job leads with the COMPANY (period on the same line, right), then
+    the title in italics -- the reverse of the other layouts. -#}
+{% import "_macros.html.j2" as m %}
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><style>
+{{ m.base_css(style) }}
+body { font-family: "{{ style.font if "Serif" in style.font or style.font in ("Caladea", "Gelasio") else "Liberation Serif" }}", serif; }
+h1 { font-size: 20pt; text-align: center; letter-spacing: 1.5pt; margin: 0; }
+.contact { text-align: center; margin: 1mm 0 5mm; font-size: 9.5pt; }
+h2 { font-size: 11pt; font-variant: small-caps; letter-spacing: 1pt; text-align: center; margin: 5mm 0 2mm;
+     border-top: 1px solid #333; border-bottom: 1px solid #333; padding: 0.6mm 0; }
+.emp { font-weight: bold; }
+.cargo { font-style: italic; }
+</style></head><body>
+<h1>{{ cv.nome }}</h1>
+<div class="contact">{{ m.contact(cv, fmt, "  ◆  ") }}</div>
+{% for section in style.section_order if m.has(cv, style, section) == "True" %}
+<h2>{{ style.headings[section] }}</h2>
+{% if section == "experiencias" %}
+{% for e in cv.experiencias %}<div class="item">
+  <div><span class="emp">{{ e.empresa }}</span>{% if e.cidade %}, {{ e.cidade }}{% endif %}<span class="periodo">{{ fmt.period(e.inicio, e.fim) }}</span></div>
+  <div class="cargo">{{ e.cargo }}</div>
+  {% if e.descricao %}<p class="desc">{{ e.descricao }}</p>{% endif %}
+</div>{% endfor %}
+{% elif section == "formacao" %}
+{% for f in cv.formacao %}<div class="item">
+  <div><span class="emp">{{ f.instituicao }}</span><span class="periodo">{{ fmt.completion(f.conclusao) }}</span></div>
+  <div class="cargo">{{ f.curso }}{% if style.show_nivel_label and f.nivel not in ("fundamental", "medio") %} ({{ fmt.nivel(f.nivel) }}){% endif %}</div>
+</div>{% endfor %}
+{% else %}
+{{ m.body(cv, fmt, style, section) }}
+{% endif %}
+{% endfor %}
+</body></html>

@@ -1,0 +1,37 @@
+{#- Main column left, a light sidebar on the RIGHT (contact, skills, languages, extras).
+    Extraction interleaves the sidebar into the END of each main line. -#}
+{% import "_macros.html.j2" as m %}
+{% set side = ["habilidades", "idiomas", "extras"] %}
+{% set contact = [cv.email, fmt.phone(cv.telefone), fmt.city(cv.cidade, cv.uf), cv.linkedin] | select | list %}
+{% set long_contact = contact | select("long_contact") | list %}
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><style>
+{{ m.base_css(style) }}
+@page { margin: 0; }
+body { margin: 0; }
+.sidebar { float: right; width: 60mm; min-height: 297mm; padding: 16mm 8mm 10mm 7mm;
+           background: #f1f1f1; border-left: 3px solid {{ style.accent }}; box-sizing: border-box; }
+.sidebar h2 { font-size: 10.5pt; color: {{ style.accent }}; margin: 5mm 0 2mm; }
+.sidebar .contact-line { margin-bottom: 1.5mm; white-space: nowrap; font-size: 8.5pt; }
+.main { margin-right: 66mm; padding: 16mm 0 10mm 14mm; }
+h1 { font-size: 22pt; margin: 0 0 1mm; }
+.contact-main { margin: 0 0 3mm; color: #444; }
+.main h2 { font-size: 12pt; color: {{ style.accent }}; border-bottom: 2px solid {{ style.accent }}; margin: 5mm 0 2mm; }
+</style></head><body>
+<div class="sidebar">
+  <h2>Contato</h2>
+  {% for part in contact if part not in long_contact %}<div class="contact-line">{{ part }}</div>{% endfor %}
+  {% for section in style.section_order if section in side and m.has(cv, style, section) == "True" %}
+  <h2>{{ style.headings[section] }}</h2>
+  {{ m.body(cv, fmt, style, section) }}
+  {% endfor %}
+</div>
+<div class="main">
+  <h1>{{ cv.nome }}</h1>
+  {% if long_contact %}<div class="contact-main">{% for part in long_contact %}{% if not loop.first %} · {% endif %}<span class="nobr">{{ part }}</span>{% endfor %}</div>{% endif %}
+  {% for section in style.section_order if section not in side and m.has(cv, style, section) == "True" %}
+  <h2>{{ style.headings[section] }}</h2>
+  {{ m.body(cv, fmt, style, section) }}
+  {% endfor %}
+</div>
+</body></html>

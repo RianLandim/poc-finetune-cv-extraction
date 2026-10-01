@@ -16,8 +16,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 SCHEMA_VERSION = "1.0.0"
 
-# "YYYY-MM", or "YYYY" when the resume only gives a year.
-DATE_PATTERN = r"^\d{4}(-(0[1-9]|1[0-2]))?$"
+# "YYYY-MM", or "YYYY" when the resume only gives a year. [0-9], not \d: llama.cpp's
+# json_schema -> grammar converter rejects \d and then silently accepts ANY string.
+DATE_PATTERN = r"^[0-9]{4}(-(0[1-9]|1[0-2]))?$"
 
 NivelFormacao = Literal[
     "fundamental", "medio", "tecnico", "graduacao", "pos", "mestrado", "doutorado"
@@ -75,5 +76,17 @@ def to_target(cv: Curriculo) -> str:
 
 
 def json_schema() -> dict:
-    """For llama.cpp's grammar-constrained decoding (ADR 0007)."""
-    return Curriculo.model_json_schema()
+    """For llama.cpp's grammar-constrained decoding (ADR 0007).
+
+    Every key is made required, matching ``to_target`` (which always emits every key, in
+    schema order). llama.cpp's grammar keeps optional keys in schema order but lets them
+    be skipped, so a model that writes "habilidades" before "experiencias" silently loses
+    every experience: the grammar then forbids the earlier key. Nullability and the empty
+    list stay allowed, so the model can still say "absent".
+    """
+    schema = Curriculo.model_json_schema()
+    for obj in [schema, *schema["$defs"].values()]:
+        obj["required"] = list(obj["properties"])
+        for prop in obj["properties"].values():
+            prop.pop("default", None)
+    return schema

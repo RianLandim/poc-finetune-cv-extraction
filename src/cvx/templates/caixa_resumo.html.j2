@@ -1,0 +1,23 @@
+{#- Header split in two: name and contact on the left, the summary in a shaded box on the
+    right, so the summary's lines are glued to the name and contact lines. -#}
+{% import "_macros.html.j2" as m %}
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><style>
+{{ m.base_css(style) }}
+.top { display: flex; gap: 6mm; margin-bottom: 4mm; }
+.who { flex: 0 0 92mm; }
+.who h1 { font-size: 20pt; margin: 0 0 2mm; color: {{ style.accent }}; }
+.who .contact-line { margin-bottom: 1mm; white-space: nowrap; font-size: 9pt; }
+.box { flex: 1; background: #f0f0f0; border-left: 3px solid {{ style.accent }}; padding: 2mm 3mm; font-size: 9pt; }
+.box h2 { font-size: 10pt; margin: 0 0 1mm; }
+h2 { font-size: 12pt; margin: 5mm 0 2mm; color: {{ style.accent }}; }
+</style></head><body>
+<div class="top">
+  <div class="who"><h1>{{ cv.nome }}</h1>{{ m.contact_lines(cv, fmt) }}</div>
+  {% if cv.resumo %}<div class="box"><h2>{{ style.headings["resumo"] }}</h2>{{ m.resumo(cv) }}</div>{% endif %}
+</div>
+{% for section in style.section_order if section != "resumo" and m.has(cv, style, section) == "True" %}
+<h2>{{ style.headings[section] }}</h2>
+{{ m.body(cv, fmt, style, section) }}
+{% endfor %}
+</body></html>

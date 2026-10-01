@@ -1,0 +1,25 @@
+{#- Coloured header band: name and contact in a 2x2 grid, extracted pairwise
+    (email beside phone, city beside LinkedIn). Body in one column below. -#}
+{% import "_macros.html.j2" as m %}
+{% set contact = [cv.email, fmt.phone(cv.telefone), fmt.city(cv.cidade, cv.uf), cv.linkedin] | select | list %}
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><style>
+{{ m.base_css(style) }}
+@page { margin: 0 0 14mm; }
+body { margin: 0; }
+.band { background: {{ style.accent }}; color: #fff; padding: 10mm 15mm 6mm; }
+.band h1 { font-size: 23pt; margin: 0 0 3mm; }
+.band .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1mm 6mm; font-size: 9.5pt; }
+.band .grid div { white-space: nowrap; }
+.body { padding: 2mm 15mm 0; }
+h2 { font-size: 12pt; margin: 5mm 0 2mm; color: {{ style.accent }}; }
+</style></head><body>
+<div class="band"><h1>{{ cv.nome }}</h1>
+<div class="grid">{% for part in contact %}<div>{{ part }}</div>{% endfor %}</div></div>
+<div class="body">
+{% for section in style.section_order if m.has(cv, style, section) == "True" %}
+<h2>{{ style.headings[section] }}</h2>
+{{ m.body(cv, fmt, style, section) }}
+{% endfor %}
+</div>
+</body></html>

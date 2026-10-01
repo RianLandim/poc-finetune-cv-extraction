@@ -1,0 +1,31 @@
+{#- Full-width header, then two EQUAL columns: experience and summary on the left,
+    education, skills, languages and extras on the right. Every body line interleaves. -#}
+{% import "_macros.html.j2" as m %}
+{% set left = ["resumo", "experiencias"] %}
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><style>
+{{ m.base_css(style) }}
+h1 { font-size: 21pt; margin: 0; color: {{ style.accent }}; }
+.contact { margin: 1mm 0 4mm; padding-bottom: 2mm; border-bottom: 1px solid #aaa; color: #444; }
+.cols { display: flex; gap: 8mm; }
+.col { flex: 1; min-width: 0; }
+h2 { font-size: 11pt; color: {{ style.accent }}; margin: 4mm 0 2mm; text-transform: uppercase; }
+.periodo { float: none; display: block; font-size: 9pt; }
+</style></head><body>
+<h1>{{ cv.nome }}</h1>
+<div class="contact">{{ m.contact(cv, fmt) }}</div>
+<div class="cols">
+  <div class="col">
+  {% for section in style.section_order if section in left and m.has(cv, style, section) == "True" %}
+  <h2>{{ style.headings[section] }}</h2>
+  {{ m.body(cv, fmt, style, section) }}
+  {% endfor %}
+  </div>
+  <div class="col">
+  {% for section in style.section_order if section not in left and m.has(cv, style, section) == "True" %}
+  <h2>{{ style.headings[section] }}</h2>
+  {{ m.body(cv, fmt, style, section) }}
+  {% endfor %}
+  </div>
+</div>
+</body></html>

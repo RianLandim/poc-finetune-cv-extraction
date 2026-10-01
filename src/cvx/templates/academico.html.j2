@@ -1,0 +1,23 @@
+{#- Education first and experience in ASCENDING order (oldest job first), as in academic
+    and first-job resumes. The model must not assume the first job is the current one. -#}
+{% import "_macros.html.j2" as m %}
+{% set order = ["formacao", "idiomas", "resumo", "experiencias", "habilidades", "extras"] %}
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><style>
+{{ m.base_css(style) }}
+h1 { font-size: 19pt; margin: 0; }
+.contact { margin: 1mm 0 4mm; color: #444; }
+h2 { font-size: 11.5pt; color: {{ style.accent }}; margin: 5mm 0 2mm; }
+h2::before { content: "§ "; color: #999; }
+</style></head><body>
+<h1>{{ cv.nome }}</h1>
+<div class="contact">{{ m.contact(cv, fmt) }}</div>
+{% for section in order if m.has(cv, style, section) == "True" %}
+<h2>{{ style.headings[section] }}</h2>
+{% if section == "experiencias" %}
+{% for e in cv.experiencias | reverse %}{{ m.experiencia(e, fmt, style) }}{% endfor %}
+{% else %}
+{{ m.body(cv, fmt, style, section) }}
+{% endif %}
+{% endfor %}
+</body></html>

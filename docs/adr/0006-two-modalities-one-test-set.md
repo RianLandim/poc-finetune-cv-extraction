@@ -1,6 +1,6 @@
 # ADR 0006 — Two modalities, one test set
 
-- **Status:** Proposed
+- **Status:** Proposed — model choice amended by ADR 0012 (Qwen3.5-4B for both)
 - **Date:** 2026-09-30
 
 ## Context

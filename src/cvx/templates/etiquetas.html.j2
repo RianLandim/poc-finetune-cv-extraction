@@ -1,0 +1,29 @@
+{#- Skills as pill tags in a three-column grid, languages as level bars: no commas, so
+    where one skill ends and the next begins is visible only in the layout. -#}
+{% import "_macros.html.j2" as m %}
+{% set levels = {"basico": 1, "intermediario": 2, "avancado": 3, "fluente": 4, "nativo": 5} %}
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><style>
+{{ m.base_css(style) }}
+h1 { font-size: 21pt; margin: 0; color: {{ style.accent }}; }
+.contact { margin: 1mm 0 4mm; color: #444; }
+h2 { font-size: 12pt; margin: 5mm 0 2mm; }
+.tags { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1.5mm; }
+.tag { border: 1px solid {{ style.accent }}; border-radius: 3mm; padding: 0.6mm 2mm; font-size: 9pt; }
+.lang { display: grid; grid-template-columns: 35mm 30mm 1fr; align-items: center; margin-bottom: 1mm; }
+.bar { height: 2mm; background: #ddd; }
+.bar span { display: block; height: 2mm; background: {{ style.accent }}; }
+</style></head><body>
+<h1>{{ cv.nome }}</h1>
+<div class="contact">{{ m.contact(cv, fmt) }}</div>
+{% for section in style.section_order if m.has(cv, style, section) == "True" %}
+<h2>{{ style.headings[section] }}</h2>
+{% if section == "habilidades" %}
+<div class="tags">{% for h in cv.habilidades %}<div class="tag">{{ h }}</div>{% endfor %}</div>
+{% elif section == "idiomas" %}
+{% for i in cv.idiomas %}<div class="lang"><span>{{ i.idioma }}</span><span>{{ fmt.language_level(i.nivel) }}</span><div class="bar"><span style="width: {{ levels[i.nivel] * 20 }}%"></span></div></div>{% endfor %}
+{% else %}
+{{ m.body(cv, fmt, style, section) }}
+{% endif %}
+{% endfor %}
+</body></html>

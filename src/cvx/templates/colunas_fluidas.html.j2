@@ -1,0 +1,22 @@
+{#- Newspaper style: the whole body flows through two CSS columns, so a section can start
+    at the bottom of the left column and continue at the top of the right one. -#}
+{% import "_macros.html.j2" as m %}
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><style>
+{{ m.base_css(style) }}
+h1 { font-size: 20pt; margin: 0; text-align: center; }
+.contact { text-align: center; margin: 1mm 0 5mm; color: #444; }
+.flow { column-count: 2; column-gap: 9mm; column-rule: 1px solid #ccc; }
+h2 { font-size: 11pt; color: {{ style.accent }}; margin: 0 0 2mm; break-after: avoid; }
+section { margin-bottom: 4mm; }
+.periodo { float: none; display: block; font-size: 9pt; }
+</style></head><body>
+<h1>{{ cv.nome }}</h1>
+<div class="contact">{{ m.contact(cv, fmt) }}</div>
+<div class="flow">
+{% for section in style.section_order if m.has(cv, style, section) == "True" %}
+<section><h2>{{ style.headings[section] }}</h2>
+{{ m.body(cv, fmt, style, section) }}</section>
+{% endfor %}
+</div>
+</body></html>

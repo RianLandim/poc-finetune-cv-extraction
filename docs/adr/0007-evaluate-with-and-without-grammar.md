@@ -26,3 +26,11 @@ as set F1; hallucination = extracted values absent from the source text.
 
 - Production can use the grammar; the free-decoding number still shows what the LoRA did.
 - Decoding is greedy (`temperature: 0`) in both runs.
+- **The grammar schema requires every key** (2026-10-01). llama.cpp keeps optional keys
+  in schema order but lets them be skipped, so a model that wrote `habilidades` before
+  `experiencias` was locked out of `experiencias` and scored 0 on it with no format error.
+  `json_schema()` now marks every property required, matching `to_target`; null and `[]`
+  stay valid. On the smoke `test_unseen` this moved tuned exp F1 75.3 -> 91.7 and base
+  skills F1 80.4 -> 98.7. Numbers from before this date are not comparable.
+- Patterns use `[0-9]`, never `\d`: the converter drops unsupported escapes and then
+  accepts any string (`tests/test_schema.py`).

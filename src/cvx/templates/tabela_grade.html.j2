@@ -1,0 +1,38 @@
+{#- Ruled tables with a header row: one row per job (Período | Cargo | Empresa | Local)
+    and per course. Narrow cells wrap, so a cell's second line is extracted next to the
+    other cells' second lines. -#}
+{% import "_macros.html.j2" as m %}
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><style>
+{{ m.base_css(style) }}
+h1 { font-size: 19pt; margin: 0; }
+.contact { margin: 1mm 0 4mm; color: #444; }
+h2 { font-size: 11pt; margin: 5mm 0 2mm; color: {{ style.accent }}; }
+table.grade { width: 100%; border-collapse: collapse; font-size: 0.95em; }
+.grade th { background: {{ style.accent }}; color: #fff; text-align: left; padding: 1mm 1.5mm; font-weight: bold; }
+.grade td { border: 1px solid #bbb; padding: 1mm 1.5mm; vertical-align: top; }
+.grade tr { page-break-inside: avoid; }
+.grade td.when { width: 30mm; }
+</style></head><body>
+<h1>{{ cv.nome }}</h1>
+<div class="contact">{{ m.contact(cv, fmt) }}</div>
+{% for section in style.section_order if m.has(cv, style, section) == "True" %}
+<h2>{{ style.headings[section] }}</h2>
+{% if section == "experiencias" %}
+<table class="grade"><tr><th>Período</th><th>Cargo</th><th>Empresa</th><th>Local</th></tr>
+{% for e in cv.experiencias %}<tr><td class="when">{{ fmt.period(e.inicio, e.fim) }}</td><td>{{ e.cargo }}</td><td>{{ e.empresa }}</td><td>{{ e.cidade or "" }}</td></tr>
+{% if e.descricao %}<tr><td></td><td colspan="3" class="desc">{{ e.descricao }}</td></tr>{% endif %}{% endfor %}
+</table>
+{% elif section == "formacao" %}
+<table class="grade"><tr><th>Conclusão</th><th>Curso</th><th>Instituição</th>{% if style.show_nivel_label %}<th>Nível</th>{% endif %}</tr>
+{% for f in cv.formacao %}<tr><td class="when">{{ fmt.completion(f.conclusao) }}</td><td>{{ f.curso }}</td><td>{{ f.instituicao }}</td>{% if style.show_nivel_label %}<td>{{ fmt.nivel(f.nivel) }}</td>{% endif %}</tr>{% endfor %}
+</table>
+{% elif section == "idiomas" %}
+<table class="grade"><tr><th>Idioma</th><th>Nível</th></tr>
+{% for i in cv.idiomas %}<tr><td>{{ i.idioma }}</td><td>{{ fmt.language_level(i.nivel) }}</td></tr>{% endfor %}
+</table>
+{% else %}
+{{ m.body(cv, fmt, style, section) }}
+{% endif %}
+{% endfor %}
+</body></html>

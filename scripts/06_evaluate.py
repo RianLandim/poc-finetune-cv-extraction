@@ -1,37 +1,194 @@
 #!/usr/bin/env python
-"""Stage 6 -- score base and tuned on test_seen, test_unseen and real_test.
+"""Stage 6 -- score base or tuned on test_seen, test_unseen (and, in phase 4, real_test).
 
-Sequential: the Makefile starts one server, this script scores it, the Makefile stops it
-(base and tuned never share the GPU). Raw /completion only (ADR 0011).
+Owns the server lifecycle: starts scripts/05_serve.sh with the model's GGUF, checks via
+GET /props that the server loaded exactly that file, scores, stops it. Base and tuned are
+separate invocations, so they never share the GPU. It refuses to start if something
+already answers on the port. Raw /completion only (ADR 0011).
 
 Each model is scored twice (ADR 0007):
 - free decoding -- measures whether the model learnt the format (JSON validity);
 - grammar-constrained (json_schema from cvx.schema) -- isolates field accuracy.
 
+A generation that does not parse is scored against an empty resume, so format failures
+count as wrong fields rather than vanishing from the averages.
+
 Refuses to run when the dataset manifest's prompt/schema version differs from cvx.prompt.
+Writes <outputs_dir>/<run>/eval-<which>.jsonl, one row per (resume, mode).
 """
 
 from __future__ import annotations
 
 import argparse
+import concurrent.futures as cf
+import dataclasses
+import json
+import subprocess
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from cvx.config import load_model_config  # noqa: E402,F401
-from cvx.metrics import score  # noqa: E402,F401
-from cvx.prompt import manifest, parse_generation  # noqa: E402,F401
+import httpx  # noqa: E402
+
+from cvx.config import gguf_path, load_data_config, load_model_config, mmproj_path  # noqa: E402
+from cvx.metrics import score  # noqa: E402
+from cvx.prompt import manifest, parse_generation, render_prompt  # noqa: E402
+from cvx.schema import Curriculo, json_schema  # noqa: E402
+
+EMPTY = Curriculo(nome="")
+MODES = ("free", "grammar")
 
 
-def main() -> None:
+class Server:
+    """One llama-server for the duration of a `with` block."""
+
+    def __init__(self, model: Path, mmproj: Path | None, port: int, ctx: int, parallel: int,
+                 log: Path) -> None:
+        self.model, self.mmproj, self.port = model, mmproj, port
+        self.ctx, self.parallel, self.log = ctx, parallel, log
+        self.url = f"http://127.0.0.1:{port}"
+        self.proc: subprocess.Popen | None = None
+
+    def __enter__(self) -> "Server":
+        try:
+            httpx.get(f"{self.url}/health", timeout=2)
+            raise SystemExit(f"FATAL: something already serves {self.url}; stop it first "
+                             "(base and tuned must never share the GPU)")
+        except httpx.TransportError:
+            pass
+        cmd = ["bash", "scripts/05_serve.sh", str(self.model), str(self.mmproj or ""),
+               str(self.port), str(self.ctx), str(self.parallel)]
+        print(">>", " ".join(cmd), flush=True)
+        self.proc = subprocess.Popen(cmd, stdout=self.log.open("w"), stderr=subprocess.STDOUT)
+        deadline = time.time() + 600
+        while time.time() < deadline:
+            if self.proc.poll() is not None:
+                raise SystemExit(f"FATAL: llama-server exited with {self.proc.returncode}; "
+                                 f"see {self.log}")
+            try:
+                if httpx.get(f"{self.url}/health", timeout=2).status_code == 200:
+                    break
+            except httpx.TransportError:
+                pass
+            time.sleep(1)
+        else:
+            raise SystemExit(f"FATAL: llama-server not healthy after 600s; see {self.log}")
+        loaded = Path(httpx.get(f"{self.url}/props", timeout=10).json()["model_path"])
+        if loaded.resolve() != self.model.resolve():
+            raise SystemExit(f"FATAL: server loaded {loaded}, expected {self.model}")
+        return self
+
+    def __exit__(self, *exc) -> None:
+        if self.proc and self.proc.poll() is None:
+            self.proc.terminate()
+            try:
+                self.proc.wait(timeout=60)
+            except subprocess.TimeoutExpired:
+                self.proc.kill()
+                self.proc.wait()
+
+
+def load_rows(path: Path) -> list[dict]:
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+
+
+def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--config", required=True)
     parser.add_argument("--which", choices=("base", "tuned"), required=True)
-    parser.add_argument("--url", default="http://127.0.0.1:8080")
+    parser.add_argument("--data-config", default="configs/data.yaml")
+    parser.add_argument("--smoke", action="store_true", help="evaluate the smoke run")
+    parser.add_argument("--splits", default="test_seen,test_unseen")
+    parser.add_argument("--modes", default=",".join(MODES))
+    parser.add_argument("--limit", type=int, default=None, help="first N rows per split")
+    parser.add_argument("--port", type=int, default=8080)
     args = parser.parse_args()
-    raise NotImplementedError("phase 2")
+    cfg = load_model_config(args.config)
+    data = load_data_config(args.data_config)
+    modality = cfg.input.modality
+    if modality != "text":
+        raise NotImplementedError("phase 3: vision requests need page images")
+    modes = [m for m in args.modes.split(",") if m]
+    if set(modes) - set(MODES):
+        parser.error(f"--modes must be a subset of {MODES}")
+
+    run = data.smoke.run if args.smoke else data.generate.run
+    data_dir = Path(data.paths.datasets_dir) / run / modality
+    ds_manifest = json.loads((data_dir / "manifest.json").read_text(encoding="utf-8"))
+    if {k: ds_manifest[k] for k in manifest()} != manifest():
+        print(f"FATAL: {data_dir} was built under {ds_manifest}, code is at {manifest()}",
+              file=sys.stderr)
+        return 1
+
+    model = gguf_path(cfg, args.which, run)
+    if not model.exists():
+        print(f"FATAL: {model} not found; run `make export` first", file=sys.stderr)
+        return 1
+    out_dir = Path(cfg.paths.outputs_dir) / run
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f"eval-{args.which}.jsonl"
+
+    from transformers import AutoProcessor
+
+    tokenizer = AutoProcessor.from_pretrained(cfg.model.base_id).tokenizer
+    cvs_dir = Path(data.paths.cvs_dir) / run
+    jobs = []
+    for split in args.splits.split(","):
+        rows = load_rows(data_dir / f"{split}.jsonl")[: args.limit]
+        for row in rows:
+            # Text prompts carry no image block; vision will go through to_server_prompt.
+            prompt = render_prompt(row["messages"], tokenizer)
+            source = (cvs_dir / f"{row['id']}.txt").read_text(encoding="utf-8")
+            for mode in modes:
+                jobs.append((row, split, mode, prompt, source))
+    print(f">> {len(jobs)} requests ({args.which}, {run}/{modality}, modes={modes})", flush=True)
+
+    schema = json_schema()
+
+    def request(client: httpx.Client, job) -> dict:
+        row, split, mode, prompt, source = job
+        body = {"prompt": prompt, "temperature": cfg.decode.temperature,
+                "n_predict": cfg.decode.max_tokens, "seed": 3407}
+        if mode == "grammar":
+            body["json_schema"] = schema
+        started = time.time()
+        r = client.post("/completion", json=body)
+        r.raise_for_status()
+        res = r.json()
+        pred, error = parse_generation(res["content"])
+        if error is None and res.get("stop_type") == "limit":
+            error = "truncated"  # parsed by luck at the token limit -- still not trustworthy
+        gold = Curriculo.model_validate(row["gold"])
+        s = score(gold, pred if pred is not None else EMPTY, source_text=source)
+        return {
+            "id": row["id"], "split": split, "template": row["template"], "mode": mode,
+            "which": args.which, "run": run, "modality": modality, "model": model.name,
+            "error": error, "raw": res["content"] if error else None,
+            "pred": pred.model_dump() if pred is not None else None,
+            "score": dataclasses.asdict(s),
+            "prompt_n": res["timings"]["prompt_n"], "predicted_n": res["timings"]["predicted_n"],
+            "latency_s": round(time.time() - started, 2),
+        }
+
+    started = time.time()
+    with Server(model, mmproj_path(cfg), args.port, cfg.serve.ctx, cfg.serve.parallel,
+                out_dir / f"serve-{args.which}.log") as server, \
+            httpx.Client(base_url=server.url, timeout=900) as client, \
+            out_path.open("w", encoding="utf-8") as f, \
+            cf.ThreadPoolExecutor(cfg.serve.parallel) as pool:
+        done, errors = 0, 0
+        for result in pool.map(lambda j: request(client, j), jobs):
+            f.write(json.dumps(result, ensure_ascii=False) + "\n")
+            done += 1
+            errors += result["error"] is not None
+            if done % 20 == 0 or done == len(jobs):
+                print(f">> {done}/{len(jobs)} ({done / (time.time() - started):.2f}/s, "
+                      f"format errors={errors})", flush=True)
+    print(f">> wrote {out_path} in {(time.time() - started) / 60:.1f} min", flush=True)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

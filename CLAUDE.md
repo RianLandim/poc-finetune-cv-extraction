@@ -2,10 +2,12 @@
 
 Fine-tune small models with **Unsloth QLoRA** to extract a **Brazilian resume PDF** into
 structured JSON, export to **GGUF**, serve and evaluate with **llama.cpp**, on an
-RTX 3070 Ti (8GB). Two competing modalities on the same test set (ADR 0006):
+RTX 3070 Ti (8GB). One base model, **Qwen3.5-4B** (natively multimodal), two competing
+modalities on the same test set (ADR 0006, 0012):
 
-- **text** — Qwen3.5-4B reads `pdfplumber` text
-- **vision** — Qwen3-VL-4B reads page images
+- **text** — reads `pdfplumber` text (`MOD=text`)
+- **vision** — reads page images (`MOD=vision`)
+- optional third arm: Qwen3-VL-4B on images (`MOD=vl`)
 
 Sibling of `../poc-fine-tunning-llamacpp` (persona fine-tune); its lessons are carried
 over below.
@@ -21,9 +23,10 @@ Every stage script and `generate/*` is a stub naming its phase:
 
 0. ~~Spike~~ — done 2026-09-30, see [`docs/spike/2026-09-30-phase0.md`](docs/spike/2026-09-30-phase0.md).
    Both models fit; raw `/completion` takes images with token-exact parity. ADR 0012
-   (Qwen3.5-4B for both modalities) awaits a decision.
-1. Generator + 3 templates + `make smoke MOD=text`.
-2. 20+ templates, full Qwen3.5-4B run, eval + report.
+   accepted: Qwen3.5-4B for both modalities.
+1. ~~Generator + 3 templates + `make smoke MOD=text`~~ — done.
+2. ~~20 templates~~ (difficulty probe: [`docs/probe/2026-10-01-templates.md`](docs/probe/2026-10-01-templates.md)),
+   full Qwen3.5-4B run, eval + report.
 3. Vision path.
 4. Real test set and final report.
 
@@ -44,7 +47,7 @@ committed (ADR 0010).
 make setup → make data → make build → make train → make export → make eval → make report
 ```
 
-`MOD=text` (default) or `MOD=vision` selects the model config. `make smoke` runs on 200
+`MOD=text` (default), `MOD=vision` or `MOD=vl` selects the model config. `make smoke` runs on 200
 resumes; run it before any multi-hour training run. `make test` for the fast suite.
 
 ## Invariants — breaking these silently invalidates results
@@ -82,6 +85,9 @@ resumes; run it before any multi-hour training run. `make test` for the fast sui
 - **llama.cpp is pinned in the Makefile** (`LLAMA_COMMIT`). Bumping it means re-running
   the spike's `completion_probe.py` and `parity_grammar.py`: conversion, the media marker
   and image token parity all live in llama.cpp.
+- **Grammar schema must require every key** (ADR 0007): optional keys can be skipped but
+  not reordered, so an out-of-order key silently empties earlier lists.
+- **Small-caps text extracts garbled** in pdfplumber; never set it on scored values.
 - **Base Qwen3.5-4B + grammar already aces a clean resume.** The synthetic test set must
   be hard (multi-column, tables, scan noise) or the A/B will show nothing.
 

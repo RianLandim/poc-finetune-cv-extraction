@@ -1,0 +1,25 @@
+{#- Dense: each job is ONE run of text, "Cargo, Empresa, Cidade (período)", wrapping
+    freely; no layout cues separate the fields, only punctuation. -#}
+{% import "_macros.html.j2" as m %}
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><style>
+{{ m.base_css(style) }}
+body { font-size: {{ style.font_size - 0.5 }}pt; }
+h1 { font-size: 16pt; margin: 0; }
+.contact { margin: 0.5mm 0 3mm; }
+h2 { font-size: 10.5pt; margin: 3mm 0 1mm; color: {{ style.accent }}; border-bottom: 1px solid #ccc; }
+p.entry { margin: 0 0 1.5mm; }
+</style></head><body>
+<h1>{{ cv.nome }}</h1>
+<div class="contact">{{ m.contact(cv, fmt, " | ") }}</div>
+{% for section in style.section_order if m.has(cv, style, section) == "True" %}
+<h2>{{ style.headings[section] }}</h2>
+{% if section == "experiencias" %}
+{% for e in cv.experiencias %}<p class="entry"><b>{{ e.cargo }}</b>, {{ e.empresa }}{% if e.cidade %}, {{ e.cidade }}{% endif %} ({{ fmt.period(e.inicio, e.fim) }}){% if e.descricao %}. {{ e.descricao }}{% endif %}</p>{% endfor %}
+{% elif section == "formacao" %}
+{% for f in cv.formacao %}<p class="entry"><b>{{ f.curso }}</b>{% if style.show_nivel_label and f.nivel not in ("fundamental", "medio") %} ({{ fmt.nivel(f.nivel) }}){% endif %}, {{ f.instituicao }}, {{ fmt.completion(f.conclusao) }}</p>{% endfor %}
+{% else %}
+{{ m.body(cv, fmt, style, section) }}
+{% endif %}
+{% endfor %}
+</body></html>

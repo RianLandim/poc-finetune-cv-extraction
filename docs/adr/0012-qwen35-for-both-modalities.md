@@ -1,8 +1,8 @@
 # ADR 0012 — Qwen3.5-4B for both modalities
 
-- **Status:** Proposed
+- **Status:** Accepted (2026-09-30)
 - **Date:** 2026-09-30
-- **Amends:** ADR 0006 (if accepted)
+- **Amends:** ADR 0006
 
 ## Context
 

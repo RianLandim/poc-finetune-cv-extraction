@@ -1,0 +1,18 @@
+{#- Section headings in a left margin column, on the same line as the section's first
+    entry: extraction glues the heading onto the first job title. -#}
+{% import "_macros.html.j2" as m %}
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><style>
+{{ m.base_css(style) }}
+h1 { font-size: 22pt; margin: 0 0 1mm 38mm; }
+.contact { margin: 0 0 5mm 38mm; color: #444; }
+.sec { display: grid; grid-template-columns: 34mm 1fr; column-gap: 4mm; margin-bottom: 3mm; }
+.sec h2 { font-size: 10pt; margin: 0; text-align: right; color: {{ style.accent }}; text-transform: uppercase; }
+.sec .content { border-left: 1px solid #ccc; padding-left: 4mm; }
+</style></head><body>
+<h1>{{ cv.nome }}</h1>
+<div class="contact">{{ m.contact(cv, fmt) }}</div>
+{% for section in style.section_order if m.has(cv, style, section) == "True" %}
+<div class="sec"><h2>{{ style.headings[section] }}</h2><div class="content">{{ m.body(cv, fmt, style, section) }}</div></div>
+{% endfor %}
+</body></html>

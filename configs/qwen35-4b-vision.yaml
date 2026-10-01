@@ -1,4 +1,4 @@
-# Text modality: pdfplumber text in, JSON out.
+# Vision modality: page images in, JSON out. Same base model as text (ADR 0012).
 
 model:
   # Natively multimodal (Qwen3_5ForConditionalGeneration), hybrid attention: 24 Gated
@@ -6,16 +6,20 @@ model:
   # exists; Unsloth quantises the 9.3GB bf16 weights at load (3.2GB on GPU after load).
   base_id: unsloth/Qwen3.5-4B
   train_id: unsloth/Qwen3.5-4B
-  # Phase 0: 3.7k tokens -> 5.2GB peak, 6.7k tokens -> 5.9GB peak (ADR 0008).
-  # A 2-page resume is ~1.5-2.5k tokens of text + ~600 of target. Measure in phase 1.
+  # Phase 0: 2 pages at 1000x1400 -> 5.0GB peak; at 1240x1754 -> 5.6GB (ADR 0008).
   max_seq_length: 4096
   load_in_4bit: true
 
 input:
-  modality: text
+  modality: vision
+  # 1000x1400 is ~1.36k vision tokens per page (32px per token after the 2x2 merge).
+  max_pixels: 1400000
+  dpi: 120
+  augment_train: true
 
 lora:
-  # Same Qwen3.5 class as vision (FastVisionModel); text never touches the tower.
+  # Language side only at first; the vision tower stays frozen, so base and tuned share
+  # one mmproj (ADR 0012).
   finetune_vision_layers: false
   r: 16
   lora_alpha: 16
@@ -59,6 +63,6 @@ serve:
   parallel: 4            # slots; eval keeps this many requests in flight
 
 paths:
-  outputs_dir: outputs/qwen35-4b-text
+  outputs_dir: outputs/qwen35-4b-vision
   gguf_dir: outputs/gguf
-  gguf_prefix: cvx-text
+  gguf_prefix: cvx-vision

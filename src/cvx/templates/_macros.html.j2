@@ -1,0 +1,86 @@
+{#- Section bodies shared by every template, so all layouts show exactly the same fields.
+    A template decides WHERE a section goes, never WHAT it shows. -#}
+
+{#- Each item is unbreakable (an email or URL never wraps mid-way, as in a real resume);
+    the line wraps only between items. -#}
+{% macro contact(cv, fmt, sep=" · ") -%}
+{%- for part in [cv.email, fmt.phone(cv.telefone), fmt.city(cv.cidade, cv.uf), cv.linkedin] if part -%}
+{% if not loop.first %}{{ sep }}{% endif %}<span class="nobr">{{ part }}</span>
+{%- endfor -%}
+{%- endmacro %}
+
+{% macro contact_lines(cv, fmt) -%}
+{% for part in [cv.email, fmt.phone(cv.telefone), fmt.city(cv.cidade, cv.uf), cv.linkedin] if part %}
+<div class="contact-line">{{ part }}</div>
+{% endfor %}
+{%- endmacro %}
+
+{% macro resumo(cv) -%}
+<p class="resumo">{{ cv.resumo }}</p>
+{%- endmacro %}
+
+{% macro experiencia(e, fmt, style, period=True) -%}
+<div class="item">
+  <div class="item-head"><span class="titulo">{{ e.cargo }}</span>{% if period %}<span class="periodo">{{ fmt.period(e.inicio, e.fim) }}</span>{% endif %}</div>
+  <div class="sub">{{ e.empresa }}{% if e.cidade %} — {{ e.cidade }}{% endif %}</div>
+  {% if e.descricao %}<p class="desc">{{ e.descricao }}</p>{% endif %}
+</div>
+{%- endmacro %}
+
+{% macro formacao(f, fmt, style, period=True) -%}
+<div class="item">
+  <div class="item-head"><span class="titulo">{{ f.curso }}</span>{% if period %}<span class="periodo">{{ fmt.completion(f.conclusao) }}</span>{% endif %}</div>
+  <div class="sub">{{ f.instituicao }}{% if style.show_nivel_label and f.nivel not in ("fundamental", "medio") %} · {{ fmt.nivel(f.nivel) }}{% endif %}</div>
+</div>
+{%- endmacro %}
+
+{% macro habilidades(cv, style) -%}
+{% if style.skill_style == "bullets" %}
+<ul class="skills">{% for h in cv.habilidades %}<li>{{ h }}</li>{% endfor %}</ul>
+{% elif style.skill_style == "dots" %}
+<p class="skills">{{ cv.habilidades | join(" • ") }}</p>
+{% else %}
+<p class="skills">{{ cv.habilidades | join(", ") }}.</p>
+{% endif %}
+{%- endmacro %}
+
+{% macro idiomas(cv, fmt) -%}
+{% for i in cv.idiomas %}<div class="lang">{{ i.idioma }}: {{ fmt.language_level(i.nivel) }}</div>{% endfor %}
+{%- endmacro %}
+
+{% macro extras(style) -%}
+<ul class="extras">{% for x in style.extras %}<li>{{ x }}</li>{% endfor %}</ul>
+{%- endmacro %}
+
+{% macro has(cv, style, section) -%}
+{%- if section == "resumo" %}{{ cv.resumo is not none }}
+{%- elif section == "experiencias" %}{{ cv.experiencias | length > 0 }}
+{%- elif section == "formacao" %}{{ cv.formacao | length > 0 }}
+{%- elif section == "habilidades" %}{{ cv.habilidades | length > 0 }}
+{%- elif section == "idiomas" %}{{ cv.idiomas | length > 0 }}
+{%- elif section == "extras" %}{{ style.extras | length > 0 }}
+{%- endif %}
+{%- endmacro %}
+
+{% macro body(cv, fmt, style, section) -%}
+{% if section == "resumo" %}{{ resumo(cv) }}
+{% elif section == "experiencias" %}{% for e in cv.experiencias %}{{ experiencia(e, fmt, style) }}{% endfor %}
+{% elif section == "formacao" %}{% for f in cv.formacao %}{{ formacao(f, fmt, style) }}{% endfor %}
+{% elif section == "habilidades" %}{{ habilidades(cv, style) }}
+{% elif section == "idiomas" %}{{ idiomas(cv, fmt) }}
+{% elif section == "extras" %}{{ extras(style) }}
+{% endif %}
+{%- endmacro %}
+
+{% macro base_css(style) -%}
+@page { size: A4; margin: 16mm 15mm; }
+body { font-family: "{{ style.font }}", sans-serif; font-size: {{ style.font_size }}pt; color: #222; line-height: 1.35; }
+p { margin: 1mm 0; }
+ul { margin: 1mm 0; padding-left: 5mm; }
+.item { margin-bottom: 3mm; page-break-inside: avoid; }
+.titulo { font-weight: bold; }
+.periodo { float: right; color: #555; }
+.sub { color: #444; }
+.desc { color: #333; }
+.nobr { white-space: nowrap; }
+{%- endmacro %}

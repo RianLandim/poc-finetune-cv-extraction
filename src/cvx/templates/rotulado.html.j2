@@ -1,0 +1,41 @@
+{#- Every field labelled ("Cargo:", "Empresa:", "Período:"), labels in a fixed-width
+    column. Close to the government / Europass forms many Brazilian candidates fill in. -#}
+{% import "_macros.html.j2" as m %}
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><style>
+{{ m.base_css(style) }}
+h1 { font-size: 18pt; margin: 0 0 3mm; }
+h2 { font-size: 11pt; margin: 5mm 0 2mm; padding: 0.8mm 2mm; border-left: 4px solid {{ style.accent }}; background: #f3f3f3; }
+table.kv { border-collapse: collapse; margin-bottom: 3mm; width: 100%; page-break-inside: avoid; }
+.kv td { padding: 0.4mm 0; vertical-align: top; }
+.kv td.k { width: 32mm; color: #555; font-weight: bold; }
+</style></head><body>
+<h1>{{ cv.nome }}</h1>
+<table class="kv">
+{% if cv.email %}<tr><td class="k">E-mail:</td><td>{{ cv.email }}</td></tr>{% endif %}
+{% if cv.telefone %}<tr><td class="k">Telefone:</td><td>{{ fmt.phone(cv.telefone) }}</td></tr>{% endif %}
+{% if cv.cidade %}<tr><td class="k">Endereço:</td><td>{{ fmt.city(cv.cidade, cv.uf) }}</td></tr>{% endif %}
+{% if cv.linkedin %}<tr><td class="k">LinkedIn:</td><td>{{ cv.linkedin }}</td></tr>{% endif %}
+</table>
+{% for section in style.section_order if m.has(cv, style, section) == "True" %}
+<h2>{{ style.headings[section] }}</h2>
+{% if section == "experiencias" %}
+{% for e in cv.experiencias %}<table class="kv">
+<tr><td class="k">Cargo:</td><td>{{ e.cargo }}</td></tr>
+<tr><td class="k">Empresa:</td><td>{{ e.empresa }}</td></tr>
+<tr><td class="k">Período:</td><td>{{ fmt.period(e.inicio, e.fim) }}</td></tr>
+{% if e.cidade %}<tr><td class="k">Local:</td><td>{{ e.cidade }}</td></tr>{% endif %}
+{% if e.descricao %}<tr><td class="k">Atividades:</td><td>{{ e.descricao }}</td></tr>{% endif %}
+</table>{% endfor %}
+{% elif section == "formacao" %}
+{% for f in cv.formacao %}<table class="kv">
+<tr><td class="k">Curso:</td><td>{{ f.curso }}</td></tr>
+<tr><td class="k">Instituição:</td><td>{{ f.instituicao }}</td></tr>
+{% if style.show_nivel_label %}<tr><td class="k">Nível:</td><td>{{ fmt.nivel(f.nivel) }}</td></tr>{% endif %}
+<tr><td class="k">Conclusão:</td><td>{{ fmt.completion(f.conclusao) }}</td></tr>
+</table>{% endfor %}
+{% else %}
+{{ m.body(cv, fmt, style, section) }}
+{% endif %}
+{% endfor %}
+</body></html>
