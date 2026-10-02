@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Stage 7 -- the 2x2 table (base/tuned x text/vision), split by seen/unseen/real.
 
-Reads every outputs/*/<run>/eval-*.jsonl and writes a Markdown report: docs/RESULTS.md
+Reads every outputs/*/<run>/eval-{base,tuned}.jsonl and writes a Markdown report: docs/RESULTS.md
 for the full run, outputs/report-<run>.md for smoke. The headline number is real_test;
 synthetic numbers are reported beside it, never instead of it.
 
@@ -65,13 +65,15 @@ def main() -> int:
     out = Path(args.out or ("docs/RESULTS.md" if not args.smoke else f"outputs/report-{run}.md"))
 
     groups: dict[tuple, list[dict]] = collections.defaultdict(list)
-    sources = sorted(Path("outputs").glob(f"*/{run}/eval-*.jsonl"))
+    # Exactly eval-base / eval-tuned: partial runs and backups beside them would double-count.
+    sources = sorted(p for which in ("base", "tuned")
+                     for p in Path("outputs").glob(f"*/{run}/eval-{which}.jsonl"))
     for path in sources:
         for line in path.read_text(encoding="utf-8").splitlines():
             r = json.loads(line)
             groups[(r["split"], r["modality"], r["which"], r["mode"])].append(r)
     if not groups:
-        print(f"FATAL: no outputs/*/{run}/eval-*.jsonl", file=sys.stderr)
+        print(f"FATAL: no outputs/*/{run}/eval-{{base,tuned}}.jsonl", file=sys.stderr)
         return 1
 
     def order(key: tuple) -> tuple:
