@@ -94,6 +94,18 @@ resumes; run it before any multi-hour training run. `make test` for the fast sui
 - **Base Qwen3.5-4B + grammar already aces a clean resume.** The synthetic test set must
   be hard (multi-column, tables, scan noise) or the A/B will show nothing.
 
+## Operational gotchas found in phase 3 (vision)
+
+- **Convert the mmproj from the original HF snapshot**, never from a `save_pretrained`
+  merge: the re-saved weights are renamed and the converter silently writes an empty,
+  metadata-only mmproj (~1KB). `04_export_gguf.py` now refuses one under 100MB.
+- **Pages are aligned to 32px at rasterisation** (A4 at 120 dpi -> 992x1408) so neither
+  the HF processor nor mtmd resizes them; eval logs `prompt-length drift` (HF vs server
+  prompt tokens) and it must stay 0.
+- **Training needs `mm_token_type_ids`** from the processor, or the model refuses to
+  compute M-RoPE.
+- The vision base GGUF is byte-identical to the text base: one base, two LoRAs (ADR 0012).
+
 ## Operational gotchas carried over from the persona repo
 
 - **Cap `TORCHINDUCTOR_COMPILE_THREADS=4` before importing torch** — inductor spawns one
