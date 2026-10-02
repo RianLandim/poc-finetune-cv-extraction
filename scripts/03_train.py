@@ -5,6 +5,11 @@ Qwen3.5-4B is natively multimodal (Qwen3_5ForConditionalGeneration), so BOTH mod
 load through FastVisionModel -- the phase 0 spike measured text training on that path.
 The vision tower stays frozen (lora.finetune_vision_layers: false).
 
+Vision rows are processed lazily in the collator: one page's pixel_values are ~30MB of
+fp32, far too much to precompute for thousands of rows. The collator runs the processor
+on the full string and on the prompt alone, masks the prompt, and applies the same
+prefix check as text.
+
 Labels are built here, not by a response-template search: the prompt prefix is
 cvx.prompt.render_prompt() of the row's messages, the full string is
 render_training_text(), and every prompt token is masked to -100. The prefix ids are
@@ -64,6 +69,57 @@ def tokenize_text_row(row: dict, tokenizer, max_len: int) -> dict:
     return {"input_ids": ids, "labels": labels, "length": len(ids)}
 
 
+def vision_example(row: dict, processor, max_len: int) -> dict:
+    """input_ids/labels/pixel_values/image_grid_thw for one vision row (batch of 1)."""
+    from PIL import Image
+
+    msgs = row["messages"]
+    prompt = render_prompt(msgs, processor)
+    full = render_training_text(msgs, Curriculo.model_validate(row["gold"]), processor)
+    if not full.startswith(prompt):
+        raise AssertionError(f"{row['id']}: training text does not start with the prompt")
+    pages = [Image.open(p).convert("RGB") for p in row["images"]]
+    enc = processor(text=[full], images=pages, return_tensors="pt")
+    prompt_ids = processor(text=[prompt], images=pages, return_tensors="pt").input_ids[0]
+    ids = enc.input_ids[0]
+    n = len(prompt_ids)
+    if not bool((ids[:n] == prompt_ids).all()):
+        raise AssertionError(f"{row['id']}: prompt tokens differ inside the full string")
+    if len(ids) != row["n_tokens"]:
+        raise AssertionError(f"{row['id']}: {len(ids)} tokens, stage 2 counted {row['n_tokens']}")
+    if len(ids) > max_len:
+        raise AssertionError(f"{row['id']}: {len(ids)} tokens > {max_len}; stage 2 drops these")
+    labels = ids.clone()
+    labels[:n] = -100
+    return {"input_ids": ids, "labels": labels, "pixel_values": enc.pixel_values,
+            "image_grid_thw": enc.image_grid_thw,
+            # marks image tokens; the model needs it for multimodal RoPE
+            "mm_token_type_ids": enc.mm_token_type_ids[0]}
+
+
+def collate_vision(rows: list[dict], processor, max_len: int):
+    import torch
+
+    def fn(batch: list[dict]) -> dict:
+        exs = [vision_example(rows[b["idx"]], processor, max_len) for b in batch]
+        pad_id = processor.tokenizer.pad_token_id
+        width = max(len(e["input_ids"]) for e in exs)
+        ids = torch.full((len(exs), width), pad_id, dtype=torch.long)
+        labels = torch.full((len(exs), width), -100, dtype=torch.long)
+        mask = torch.zeros((len(exs), width), dtype=torch.long)
+        mm = torch.zeros((len(exs), width), dtype=torch.long)
+        for i, e in enumerate(exs):
+            n = len(e["input_ids"])
+            ids[i, :n], labels[i, :n], mask[i, :n] = e["input_ids"], e["labels"], 1
+            mm[i, :n] = e["mm_token_type_ids"]
+        return {"input_ids": ids, "attention_mask": mask, "labels": labels,
+                "mm_token_type_ids": mm,
+                "pixel_values": torch.cat([e["pixel_values"] for e in exs]),
+                "image_grid_thw": torch.cat([e["image_grid_thw"] for e in exs])}
+
+    return fn
+
+
 def collate(pad_id: int):
     import torch
 
@@ -113,8 +169,6 @@ def main() -> int:
     cfg = load_model_config(args.config)
     data = load_data_config(args.data_config)
     modality = cfg.input.modality
-    if modality != "text":
-        raise NotImplementedError("phase 3: vision rows need page images and a processor collator")
 
     run = data.smoke.run if args.smoke else data.generate.run
     data_dir = Path(data.paths.datasets_dir) / run / modality
@@ -162,8 +216,22 @@ def main() -> int:
 
     max_len = cfg.model.max_seq_length
     train_rows = load_rows(data_dir / "train.jsonl")
-    train = Dataset.from_list([tokenize_text_row(r, tokenizer, max_len) for r in train_rows])
-    n_target = sum(sum(t != -100 for t in r["labels"]) for r in train)
+    if modality == "text":
+        train = Dataset.from_list([tokenize_text_row(r, tokenizer, max_len) for r in train_rows])
+        n_target = sum(sum(t != -100 for t in r["labels"]) for r in train)
+        collator = collate(tokenizer.pad_token_id)
+    else:
+        # Lengths from stage 2 (checked per row in the collator) drive group_by_length.
+        train = Dataset.from_list([{"idx": i, "length": r["n_tokens"]}
+                                   for i, r in enumerate(train_rows)])
+        n_target = sum(len(tokenizer(render_training_text(
+            r["messages"], Curriculo.model_validate(r["gold"]), processor)).input_ids)
+            - len(tokenizer(render_prompt(r["messages"], processor)).input_ids)
+            for r in train_rows)
+        collator = collate_vision(train_rows, processor, max_len)
+        first = vision_example(train_rows[0], processor, max_len)  # fail fast, before the first step
+        print(f">> first vision row: {len(first['input_ids'])} tokens, "
+              f"grid {first['image_grid_thw'].tolist()}", flush=True)
     print(f">> {len(train)} train rows, {sum(train['length'])} tokens "
           f"({n_target} in the loss)", flush=True)
 
@@ -174,7 +242,7 @@ def main() -> int:
     trainer = Trainer(
         model=model,
         train_dataset=train,
-        data_collator=collate(tokenizer.pad_token_id),
+        data_collator=collator,
         args=TrainingArguments(
             output_dir=str(out_dir / "checkpoints"),
             per_device_train_batch_size=t.per_device_train_batch_size,

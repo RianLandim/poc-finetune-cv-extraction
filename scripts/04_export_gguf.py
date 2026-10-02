@@ -104,10 +104,18 @@ def main() -> int:
 
     mmproj = mmproj_path(cfg)
     if mmproj is not None and args.which == "base" and not mmproj.exists():
-        if not (merged_dir / "config.json").exists():
-            materialise(cfg, None, merged_dir)
-        run([sys.executable, str(llama / "convert_hf_to_gguf.py"), str(merged_dir),
+        # From the original HF snapshot, not the re-saved merge: transformers'
+        # save_pretrained renames the vision weights and the converter then finds none
+        # (an empty, metadata-only mmproj; 2026-10-02). The tower is frozen, so the
+        # snapshot IS the base projector.
+        from huggingface_hub import snapshot_download
+
+        snapshot = snapshot_download(cfg.model.base_id)
+        run([sys.executable, str(llama / "convert_hf_to_gguf.py"), snapshot,
              "--mmproj", "--outfile", str(mmproj), "--outtype", "f16"])
+        if mmproj.stat().st_size < 100 * 1024**2:
+            mmproj.unlink()
+            raise SystemExit(f"FATAL: {mmproj} came out without the vision tensors")
 
     if not args.keep_intermediates:
         print(">> removing intermediates (pass --keep-intermediates to keep them)")

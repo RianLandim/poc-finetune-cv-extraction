@@ -13,6 +13,12 @@ Each model is scored twice (ADR 0007):
 A generation that does not parse is scored against an empty resume, so format failures
 count as wrong fields rather than vanishing from the averages.
 
+Vision requests send the page PNGs as base64 ``multimodal_data`` and the prompt through
+cvx.prompt.to_server_prompt with the server's media marker from GET /props. The pages are
+aligned to 32px at stage 2, so server and HF tokenise them identically; each row records
+the HF prompt length (``n_prompt``) next to the server's ``prompt_n`` + ``cache_n``, and
+the run reports how many differ.
+
 Refuses to run when the dataset manifest's prompt/schema version differs from cvx.prompt.
 Writes <outputs_dir>/<run>/eval-<which>.jsonl, one row per (resume, mode).
 """
@@ -20,6 +26,7 @@ Writes <outputs_dir>/<run>/eval-<which>.jsonl, one row per (resume, mode).
 from __future__ import annotations
 
 import argparse
+import base64
 import concurrent.futures as cf
 import dataclasses
 import json
@@ -34,7 +41,8 @@ import httpx  # noqa: E402
 
 from cvx.config import gguf_path, load_data_config, load_model_config, mmproj_path  # noqa: E402
 from cvx.metrics import score  # noqa: E402
-from cvx.prompt import manifest, parse_generation, render_prompt  # noqa: E402
+from cvx.generate.rasterize import image_tokens  # noqa: E402
+from cvx.prompt import manifest, parse_generation, render_prompt, to_server_prompt  # noqa: E402
 from cvx.schema import Curriculo, json_schema  # noqa: E402
 
 EMPTY = Curriculo(nome="")
@@ -121,6 +129,12 @@ def resumable_rows(path: Path, model: Path, model_mtime: float) -> list[dict]:
     return kept
 
 
+def hf_prompt_tokens(prompt: str, images: list[str], tokenizer) -> int:
+    """Prompt length as the HF processor sees it: each page expands to its 32px grid."""
+    n = len(tokenizer(prompt, add_special_tokens=False).input_ids)
+    return n + sum(image_tokens(Path(p)) - 1 for p in images)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--config", required=True)
@@ -138,8 +152,6 @@ def main() -> int:
     cfg = load_model_config(args.config)
     data = load_data_config(args.data_config)
     modality = cfg.input.modality
-    if modality != "text":
-        raise NotImplementedError("phase 3: vision requests need page images")
     modes = [m for m in args.modes.split(",") if m]
     if set(modes) - set(MODES):
         parser.error(f"--modes must be a subset of {MODES}")
@@ -162,14 +174,18 @@ def main() -> int:
 
     from transformers import AutoProcessor
 
-    tokenizer = AutoProcessor.from_pretrained(cfg.model.base_id).tokenizer
+    processor = AutoProcessor.from_pretrained(cfg.model.base_id)
+    # Text renders with the tokenizer, vision with the processor -- as in stages 2 and 3.
+    template_owner = processor.tokenizer if modality == "text" else processor
     cvs_dir = Path(data.paths.cvs_dir) / run
     jobs = []
     for split in args.splits.split(","):
         rows = load_rows(data_dir / f"{split}.jsonl")[: args.limit]
         for row in rows:
-            # Text prompts carry no image block; vision will go through to_server_prompt.
-            prompt = render_prompt(row["messages"], tokenizer)
+            # Text prompts carry no image block; vision swaps it for the media marker below.
+            prompt = render_prompt(row["messages"], template_owner)
+            row["n_prompt"] = hf_prompt_tokens(prompt, row.get("images", []),
+                                               processor.tokenizer)
             source = (cvs_dir / f"{row['id']}.txt").read_text(encoding="utf-8")
             for mode in modes:
                 jobs.append((row, split, mode, prompt, source))
@@ -182,10 +198,17 @@ def main() -> int:
     print(f">> {len(jobs)} requests ({args.which}, {run}/{modality}, modes={modes})", flush=True)
 
     schema = json_schema()
+    media_marker: str | None = None  # set once the server is up
 
     def request(client: httpx.Client, job) -> dict:
         row, split, mode, prompt, source = job
-        body = {"prompt": prompt, "temperature": cfg.decode.temperature,
+        if modality == "vision":
+            pages = [base64.b64encode(Path(p).read_bytes()).decode() for p in row["images"]]
+            payload = {"prompt_string": to_server_prompt(prompt, media_marker),
+                       "multimodal_data": pages}
+        else:
+            payload = prompt
+        body = {"prompt": payload, "temperature": cfg.decode.temperature,
                 "n_predict": cfg.decode.max_tokens, "seed": 3407}
         if mode == "grammar":
             body["json_schema"] = schema
@@ -205,7 +228,9 @@ def main() -> int:
             "error": error, "raw": res["content"] if error else None,
             "pred": pred.model_dump() if pred is not None else None,
             "score": dataclasses.asdict(s),
-            "prompt_n": res["timings"]["prompt_n"], "predicted_n": res["timings"]["predicted_n"],
+            "n_prompt": row["n_prompt"],
+            "prompt_n": res["timings"]["prompt_n"], "cache_n": res["timings"].get("cache_n"),
+            "predicted_n": res["timings"]["predicted_n"],
             "latency_s": round(time.time() - started, 2),
         }
 
@@ -215,15 +240,18 @@ def main() -> int:
             httpx.Client(base_url=server.url, timeout=900) as client, \
             out_path.open("a" if args.resume else "w", encoding="utf-8") as f, \
             cf.ThreadPoolExecutor(cfg.serve.parallel) as pool:
-        done, errors = 0, 0
+        if modality == "vision":
+            media_marker = client.get("/props").json()["media_marker"]
+        done, errors, drift = 0, 0, 0
         for result in pool.map(lambda j: request(client, j), jobs):
+            drift += result["prompt_n"] + (result["cache_n"] or 0) != result["n_prompt"]
             f.write(json.dumps(result, ensure_ascii=False) + "\n")
             f.flush()  # a crash keeps every finished row; --resume picks up from there
             done += 1
             errors += result["error"] is not None
             if done % 20 == 0 or done == len(jobs):
                 print(f">> {done}/{len(jobs)} ({done / (time.time() - started):.2f}/s, "
-                      f"format errors={errors})", flush=True)
+                      f"format errors={errors}, prompt-length drift={drift})", flush=True)
     print(f">> wrote {out_path} in {(time.time() - started) / 60:.1f} min", flush=True)
     return 0
 

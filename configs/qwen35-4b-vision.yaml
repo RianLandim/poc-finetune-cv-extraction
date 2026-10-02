@@ -14,8 +14,12 @@ input:
   modality: vision
   # 1000x1400 is ~1.36k vision tokens per page (32px per token after the 2x2 merge).
   max_pixels: 1400000
+  # A4 at 120 dpi is 992x1403, aligned to 992x1408 (cvx.generate.rasterize).
   dpi: 120
+  # Train rows only: this share gets a scan-like page (rotation, blur, JPEG, tinted
+  # paper) instead of the clean render. Test pages are always clean.
   augment_train: true
+  augment_frac: 0.5
 
 lora:
   # Language side only at first; the vision tower stays frozen, so base and tuned share
