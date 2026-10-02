@@ -94,6 +94,33 @@ def load_rows(path: Path) -> list[dict]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
 
 
+def resumable_rows(path: Path, model: Path, model_mtime: float) -> list[dict]:
+    """Rows of a previous run of THIS GGUF, deduplicated; rewrites the file with only them.
+
+    A row counts only if it names the same GGUF and was written for this exact file: rows
+    carry ``model_mtime``; older rows without it are accepted only when the jsonl is newer
+    than the GGUF (a re-export after retraining replaces the file and its mtime). A torn
+    last line from a crash is dropped.
+    """
+    if not path.exists():
+        return []
+    legacy_ok = path.stat().st_mtime >= model_mtime
+    rows: dict[tuple, dict] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        try:
+            r = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        same = r.get("model") == model.name and (
+            r.get("model_mtime") == model_mtime if "model_mtime" in r else legacy_ok)
+        if same:
+            rows[(r["id"], r["split"], r["mode"])] = r
+    kept = list(rows.values())
+    path.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in kept),
+                    encoding="utf-8")
+    return kept
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--config", required=True)
@@ -104,6 +131,9 @@ def main() -> int:
     parser.add_argument("--modes", default=",".join(MODES))
     parser.add_argument("--limit", type=int, default=None, help="first N rows per split")
     parser.add_argument("--port", type=int, default=8080)
+    parser.add_argument("--resume", action="store_true",
+                        help="keep rows already in eval-<which>.jsonl from this same GGUF and "
+                             "run only the missing (resume, split, mode) jobs")
     args = parser.parse_args()
     cfg = load_model_config(args.config)
     data = load_data_config(args.data_config)
@@ -143,6 +173,12 @@ def main() -> int:
             source = (cvs_dir / f"{row['id']}.txt").read_text(encoding="utf-8")
             for mode in modes:
                 jobs.append((row, split, mode, prompt, source))
+    model_mtime = model.stat().st_mtime
+    kept = resumable_rows(out_path, model, model_mtime) if args.resume else []
+    done_keys = {(r["id"], r["split"], r["mode"]) for r in kept}
+    jobs = [j for j in jobs if (j[0]["id"], j[1], j[2]) not in done_keys]
+    if args.resume:
+        print(f">> resume: keeping {len(kept)} rows from {out_path}", flush=True)
     print(f">> {len(jobs)} requests ({args.which}, {run}/{modality}, modes={modes})", flush=True)
 
     schema = json_schema()
@@ -165,6 +201,7 @@ def main() -> int:
         return {
             "id": row["id"], "split": split, "template": row["template"], "mode": mode,
             "which": args.which, "run": run, "modality": modality, "model": model.name,
+            "model_mtime": model_mtime,
             "error": error, "raw": res["content"] if error else None,
             "pred": pred.model_dump() if pred is not None else None,
             "score": dataclasses.asdict(s),
@@ -176,11 +213,12 @@ def main() -> int:
     with Server(model, mmproj_path(cfg), args.port, cfg.serve.ctx, cfg.serve.parallel,
                 out_dir / f"serve-{args.which}.log") as server, \
             httpx.Client(base_url=server.url, timeout=900) as client, \
-            out_path.open("w", encoding="utf-8") as f, \
+            out_path.open("a" if args.resume else "w", encoding="utf-8") as f, \
             cf.ThreadPoolExecutor(cfg.serve.parallel) as pool:
         done, errors = 0, 0
         for result in pool.map(lambda j: request(client, j), jobs):
             f.write(json.dumps(result, ensure_ascii=False) + "\n")
+            f.flush()  # a crash keeps every finished row; --resume picks up from there
             done += 1
             errors += result["error"] is not None
             if done % 20 == 0 or done == len(jobs):

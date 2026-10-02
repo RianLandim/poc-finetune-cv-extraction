@@ -10,6 +10,9 @@ export LLAMA_COMMIT
 # SMOKE=1 points train/export/eval/report at the smoke run (configs/data.yaml smoke.run).
 SMOKE    ?=
 RUNFLAG  := $(if $(SMOKE),--smoke)
+# RESUME=1 makes `make eval` keep finished rows from the same GGUF and run only the rest.
+RESUME   ?=
+EVALFLAG := $(RUNFLAG) $(if $(RESUME),--resume)
 
 ifeq ($(MOD),text)
 CONFIG ?= configs/qwen35-4b-text.yaml
@@ -53,8 +56,8 @@ serve:
 # Each invocation starts its own llama-server, scores and stops it: base, then tuned,
 # never both at once. Stop `make teacher` / `make serve` first.
 eval:
-	$(UV) run python scripts/06_evaluate.py --config $(CONFIG) --data-config $(DATA_CFG) --which base $(RUNFLAG)
-	$(UV) run python scripts/06_evaluate.py --config $(CONFIG) --data-config $(DATA_CFG) --which tuned $(RUNFLAG)
+	$(UV) run python scripts/06_evaluate.py --config $(CONFIG) --data-config $(DATA_CFG) --which base $(EVALFLAG)
+	$(UV) run python scripts/06_evaluate.py --config $(CONFIG) --data-config $(DATA_CFG) --which tuned $(EVALFLAG)
 
 report:
 	$(UV) run python scripts/07_report.py --data-config $(DATA_CFG) $(RUNFLAG)
