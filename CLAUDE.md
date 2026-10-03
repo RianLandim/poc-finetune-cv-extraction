@@ -27,7 +27,8 @@ Every stage script and `generate/*` is a stub naming its phase:
 1. ~~Generator + 3 templates + `make smoke MOD=text`~~ — done.
 2. ~~20 templates, full Qwen3.5-4B text run, eval + report~~ — done 2026-10-02, see
    [`docs/RESULTS.md`](docs/RESULTS.md) (probe: [`docs/probe/2026-10-01-templates.md`](docs/probe/2026-10-01-templates.md)).
-3. Vision path.
+3. ~~Vision path~~ — done 2026-10-02, results in [`docs/RESULTS.md`](docs/RESULTS.md).
+   Still open: the scanned test variant (ADR 0006); train already sees scan augmentation.
 4. Real test set and final report.
 
 ## Hardware and environment
