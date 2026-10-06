@@ -7,6 +7,13 @@ carry the extracted text; vision rows carry page image paths (``images``), raste
 here by cvx.generate.rasterize -- clean for every split, and for a share
 (``input.augment_frac``) of TRAIN rows a scan-like version instead (``input.augment_train``).
 
+With ``scan_test.enabled`` it also writes the scanned test variant (ADR 0006):
+``test_seen_scan`` / ``test_unseen_scan`` hold the same resumes as ``test_seen`` /
+``test_unseen``, every page through ``scan_like``. Vision rows point at those pages; text
+rows carry what the extractor (same function, same settings) reads from an image-only PDF
+of them -- for a scan, usually nothing. Written next to each resume as
+``cv_X-pN-scan.png``, ``cv_X-scan.pdf`` and ``cv_X-scan.txt``.
+
 Fails loudly if any train row's template is in the unseen set.
 
 Writes data/datasets/<run>/<modality>/{train,val,test_seen,test_unseen}.jsonl, one row:
@@ -34,11 +41,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from cvx.config import load_data_config, load_model_config  # noqa: E402
-from cvx.generate.rasterize import image_tokens, pdf_to_pages  # noqa: E402
+from cvx.generate.extract_text import pdf_to_text  # noqa: E402
+from cvx.generate.rasterize import image_tokens, pdf_to_pages, scan_pdf  # noqa: E402
 from cvx.prompt import manifest as prompt_manifest  # noqa: E402
 from cvx.prompt import messages, render_training_text  # noqa: E402
 from cvx.schema import Curriculo  # noqa: E402
-from cvx.splits import SPLITS, assign, unseen_templates  # noqa: E402
+from cvx.splits import SCAN_SPLITS, SPLITS, assign, unseen_templates  # noqa: E402
 
 # Vision rows whose analytic token count is checked against the real processor.
 PROCESSOR_CHECKS = 8
@@ -48,6 +56,18 @@ PROCESSOR_CHECKS = 8
 def _rasterize(job: tuple) -> list[str]:
     pdf, n_pages, dpi, max_pixels, augment, seed = job
     return [str(p) for p in pdf_to_pages(Path(pdf), n_pages, dpi, max_pixels, augment, seed)]
+
+
+def _scan(job: tuple) -> tuple[list[str], str]:
+    """Scan pages for one test resume, plus the extractor's text of their image-only PDF."""
+    pdf, n_pages, dpi, max_pixels, seed = job
+    pages = pdf_to_pages(Path(pdf), n_pages, dpi, max_pixels, True, seed)
+    stem = Path(pdf).with_suffix("")
+    txt = stem.with_name(f"{stem.name}-scan.txt")
+    if not txt.exists():
+        text = pdf_to_text(scan_pdf(pages, stem.with_name(f"{stem.name}-scan.pdf"), dpi))
+        txt.write_text(text, encoding="utf-8")
+    return [str(p) for p in pages], txt.read_text(encoding="utf-8")
 
 
 def main() -> None:
@@ -99,7 +119,21 @@ def main() -> None:
             for m, paths in zip(metas, pool.map(_rasterize, jobs, chunksize=16)):
                 images[m["id"]] = paths
 
-    rows: dict[str, list[dict]] = {s: [] for s in SPLITS}
+    scan = getattr(data, "scan_test", None)
+    scan = scan if scan is not None and scan.enabled else None
+    scans: dict[str, tuple[list[str], str]] = {}
+    if scan is not None:
+        if modality == "vision" and (scan.dpi, scan.max_pixels) != (cfg.input.dpi,
+                                                                    cfg.input.max_pixels):
+            sys.exit("FATAL: scan_test.dpi/max_pixels differ from the vision input.dpi/max_pixels")
+        jobs = [(str(cvs_dir / f"{m['id']}.pdf"), m["n_pages"], scan.dpi, scan.max_pixels,
+                 data.generate.seed) for m in metas if splits[m["id"]] in SCAN_SPLITS]
+        print(f">> scanning {len(jobs)} test resumes", flush=True)
+        with ProcessPoolExecutor(max_workers=data.generate.workers) as pool:
+            for job, result in zip(jobs, pool.map(_scan, jobs, chunksize=16)):
+                scans[Path(job[0]).stem] = result
+
+    rows: dict[str, list[dict]] = {s: [] for s in (*SPLITS, *SCAN_SPLITS.values())}
     dropped: collections.Counter = collections.Counter()
     checked = 0
     for meta in metas:
@@ -136,9 +170,21 @@ def main() -> None:
         rows[split].append({"id": meta["id"], "persona_uuid": meta["persona_uuid"],
                             "template": meta["template"], "split": split, "messages": msgs,
                             "gold": cv.model_dump(), "n_tokens": n_tokens, **extra})
+        if meta["id"] in scans:
+            pages, text = scans[meta["id"]]
+            if modality == "text":
+                msgs = messages(cv_text=text)
+                n_tokens = len(tokenizer(render_training_text(msgs, cv, tokenizer)).input_ids)
+                extra = {}
+            else:  # same page count and size as the clean pages: same prompt, same tokens
+                extra = {"images": pages}
+            scan_split = SCAN_SPLITS[split]
+            rows[scan_split].append({**rows[split][-1], "split": scan_split, "messages": msgs,
+                                     "n_tokens": n_tokens, **extra})
 
     seen_personas: dict[str, str] = {}
-    for split, split_rows in rows.items():
+    for split in SPLITS:  # scan rows repeat their test resume by design
+        split_rows = rows[split]
         for r in split_rows:
             other = seen_personas.setdefault(r["persona_uuid"], split)
             if other != split:
@@ -151,7 +197,7 @@ def main() -> None:
             for r in split_rows:
                 f.write(json.dumps(r, ensure_ascii=False) + "\n")
 
-    all_tokens = sorted(r["n_tokens"] for rs in rows.values() for r in rs)
+    all_tokens = sorted(r["n_tokens"] for s in SPLITS for r in rows[s])
 
     def pct(q: float) -> int:
         return all_tokens[min(len(all_tokens) - 1, int(q * len(all_tokens)))] if all_tokens else 0
@@ -168,6 +214,9 @@ def main() -> None:
         "max_seq_length": max_len,
         "test_rows_over_max_seq_length": sum(
             r["n_tokens"] > max_len for s in ("test_seen", "test_unseen") for r in rows[s]),
+        **({"scan_test": vars(scan), "scan_rows_without_text": sum(
+            not scans[r["id"]][1].strip() for s in SCAN_SPLITS.values() for r in rows[s])}
+           if scan is not None else {}),
         "n_tokens": {"p50": pct(0.5), "p95": pct(0.95), "max": pct(1.0)},
         **({"input": vars(cfg.input),
             "scan_augmented_train": sum("-scan" in r["images"][0] for r in rows["train"])}

@@ -52,3 +52,11 @@ paths:
   cvs_dir: data/cvs        # <run>/cv_000123.{json,pdf,txt,meta.json} (+ -p1.png ...)
   datasets_dir: data/datasets
   real_test_dir: data/real_test
+
+scan_test:
+  # Scanned variant of test_seen/test_unseen (ADR 0006), built by stage 2 for both arms
+  # with cvx.generate.rasterize.scan_like. Must match the vision config's input.dpi /
+  # input.max_pixels, so the vision arm sees the pixels it was trained at.
+  enabled: true
+  dpi: 120
+  max_pixels: 1400000

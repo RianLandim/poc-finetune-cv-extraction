@@ -15,6 +15,8 @@ from __future__ import annotations
 import hashlib
 
 SPLITS = ("train", "val", "test_seen", "test_unseen")
+# The same test resumes, printed and scanned (ADR 0006): derived rows, not a new assignment.
+SCAN_SPLITS = {"test_seen": "test_seen_scan", "test_unseen": "test_unseen_scan"}
 
 
 def _unit(key: str, seed: int) -> float:

@@ -46,6 +46,14 @@ decodificação com gramática JSON. Base → ajustado, em %:
 | texto | 98,5 → **99,7** | 81,7 → **97,2** | 91,0 → **98,3** | 83,0 → **98,9** | 94,1 → **99,7** | 4,7 → 4,9 |
 | visão | 95,7 → **99,6** | 91,6 → **99,6** | 99,3 → **99,8** | 97,9 → **99,2** | 89,5 → **99,9** | 5,7 → **5,2** |
 
+**Currículo escaneado** (`test_unseen_scan`: os mesmos 1.187 currículos impressos e
+escaneados — papel tingido, leve rotação, blur, JPEG), com gramática:
+
+| Modalidade | Escalares | Experiências F1 | Formação F1 | Habilidades F1 | Alucinação |
+|---|--:|--:|--:|--:|--:|
+| texto | 12,4 → 4,5 | 0,0 → 0,0 | 0,0 → 0,0 | 0,0 → 0,9 | 0,0 → 97,9 |
+| visão | 96,9 → **99,8** | 90,6 → **99,5** | 99,4 → **99,6** | 97,6 → **99,1** | 5,6 → **5,2** |
+
 **Tempo de processamento** por currículo (média, 4 requisições simultâneas, com gramática):
 
 | Modalidade | Base | Ajustado | Ganho | Tokens de saída (base → ajustado) |
@@ -63,5 +71,12 @@ Em resumo:
 - Visão ajustada é a mais precisa (experiências 99,6 vs 97,2 no texto, sobretudo em layouts
   multicoluna); texto é ~26% mais rápido na inferência e treina em ~1/3 do tempo.
 - A alucinação fica estável em ~5% nos dois modelos.
-- Ainda pendente: conjunto de teste real (`real_test`) e a variante escaneada do teste
-  (fase 4, ver `CLAUDE.md`).
+- **Escaneado, a visão não perde nada** (99,5 em experiências contra 99,6 no limpo). O
+  texto não tem o que ler: sem OCR, o `pdfplumber` devolve vazio.
+- **Cuidado com texto vazio + gramática:** o texto ajustado, forçado pela gramática a
+  preencher `nome`, inventa o mesmo currículo falso ("Carlos Eduardo", `(11) 99999-9999`)
+  para todos os 1.412 escaneados. Sem gramática ele responde corretamente tudo `null`. Em
+  produção, texto extraído vazio deve desviar para a visão (ou OCR) antes do modelo.
+- Ainda pendente: conjunto de teste real (`real_test`, fase 4, ver `CLAUDE.md`). O scan
+  sintético é leve (mesma distribuição do aumento de treino); scans ruins de verdade
+  ficam para o teste real.

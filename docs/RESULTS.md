@@ -18,6 +18,13 @@ Contents: [Summary](#summary) · [Training](#training) · [Accuracy](#accuracy-b
 | text | 100.0 → 100.0 | 98.5 → **99.7** | 81.7 → **97.2** | 91.0 → **98.3** | 83.0 → **98.9** | 4.7 → 4.9 | 8.9 → **5.7** |
 | vision | 99.9 → **100.0** | 95.7 → **99.6** | 91.6 → **99.6** | 99.3 → **99.8** | 97.9 → **99.2** | 5.7 → **5.2** | 11.2 → **7.6** |
 
+Scanned variant (`test_unseen_scan`): the same resumes printed and scanned (ADR 0006). The text arm reads whatever the extractor finds in the image-only PDF.
+
+| modality | JSON ok | scalars | exp F1 | edu F1 | skills F1 | halluc. | s/req |
+|---|--:|--:|--:|--:|--:|--:|--:|
+| text | 100.0 → 100.0 | 12.4 → 4.5 | 0.0 → 0.0 | 0.0 → 0.0 | 0.0 → **0.9** | 0.0 → 97.9 | 1.4 → 4.0 |
+| vision | 100.0 → 100.0 | 96.9 → **99.8** | 90.6 → **99.5** | 99.4 → **99.6** | 97.6 → **99.1** | 5.6 → **5.2** | 11.0 → **7.5** |
+
 ## Training
 
 QLoRA (4-bit base, r=16) for one epoch, loss on the assistant turn only. Read from
@@ -104,24 +111,66 @@ source text (lower is better). *Δ*: tuned minus base in points, bold when tuned
 | vision | free | tuned | 100.0 | 99.9 | 99.6 | 99.8 | 100.0 | 99.4 | 100.0 | 2.8 |
 | vision | free | *Δ* | **+100.0** | **+88.3** | **+99.6** | -0.2 | **+100.0** | **+99.4** | **+100.0** | +2.8 |
 
+### `test_unseen_scan` (n=1187)
+
+| modality | mode | model | JSON ok | scalars | exp F1 | exp dates | edu F1 | skills F1 | lang F1 | halluc. |
+|---|---|---|--:|--:|--:|--:|--:|--:|--:|--:|
+| text | grammar | base | 100.0 | 12.4 | 0.0 | 100.0 | 0.0 | 0.0 | 0.0 | 0.0 |
+| text | grammar | tuned | 100.0 | 4.5 | 0.0 | 100.0 | 0.0 | 0.9 | 4.0 | 97.9 |
+| text | grammar | *Δ* | +0.0 | -7.9 | +0.0 | +0.0 | +0.0 | **+0.9** | **+4.0** | +97.9 |
+| text | free | base | 0.0 | 12.4 | 0.0 | 100.0 | 0.0 | 0.0 | 0.0 | 0.0 |
+| text | free | tuned | 0.0 | 12.4 | 0.0 | 100.0 | 0.0 | 0.0 | 0.0 | 0.0 |
+| text | free | *Δ* | +0.0 | +0.0 | +0.0 | +0.0 | +0.0 | +0.0 | +0.0 | +0.0 |
+| vision | grammar | base | 100.0 | 96.9 | 90.6 | 97.5 | 99.4 | 97.6 | 89.3 | 5.6 |
+| vision | grammar | tuned | 100.0 | 99.8 | 99.5 | 99.7 | 99.6 | 99.1 | 99.9 | 5.2 |
+| vision | grammar | *Δ* | +0.0 | **+2.9** | **+8.9** | **+2.3** | **+0.3** | **+1.5** | **+10.5** | **-0.5** |
+| vision | free | base | 0.1 | 12.5 | 0.3 | 100.0 | 0.0 | 0.2 | 0.0 | 10.0 |
+| vision | free | tuned | 99.8 | 99.6 | 99.5 | 99.6 | 99.6 | 99.0 | 99.8 | 5.1 |
+| vision | free | *Δ* | **+99.7** | **+87.2** | **+99.1** | -0.4 | **+99.6** | **+98.8** | **+99.8** | **-4.9** |
+
+### `test_seen_scan` (n=225)
+
+| modality | mode | model | JSON ok | scalars | exp F1 | exp dates | edu F1 | skills F1 | lang F1 | halluc. |
+|---|---|---|--:|--:|--:|--:|--:|--:|--:|--:|
+| text | grammar | base | 100.0 | 11.6 | 0.0 | 100.0 | 0.0 | 0.0 | 0.0 | 0.0 |
+| text | grammar | tuned | 100.0 | 4.8 | 0.0 | 100.0 | 0.0 | 0.9 | 5.2 | 97.8 |
+| text | grammar | *Δ* | +0.0 | -6.8 | +0.0 | +0.0 | +0.0 | **+0.9** | **+5.2** | +97.8 |
+| text | free | base | 0.0 | 11.6 | 0.0 | 100.0 | 0.0 | 0.0 | 0.0 | 0.0 |
+| text | free | tuned | 0.0 | 11.6 | 0.0 | 100.0 | 0.0 | 0.0 | 0.0 | 0.0 |
+| text | free | *Δ* | +0.0 | +0.0 | +0.0 | +0.0 | +0.0 | +0.0 | +0.0 | +0.0 |
+| vision | grammar | base | 100.0 | 95.9 | 89.4 | 98.4 | 98.1 | 97.6 | 89.0 | 3.2 |
+| vision | grammar | tuned | 100.0 | 99.9 | 99.8 | 99.8 | 100.0 | 99.6 | 100.0 | 2.8 |
+| vision | grammar | *Δ* | +0.0 | **+4.1** | **+10.4** | **+1.5** | **+1.9** | **+2.0** | **+11.0** | **-0.4** |
+| vision | free | base | 0.0 | 11.6 | 0.0 | 100.0 | 0.0 | 0.0 | 0.0 | 0.0 |
+| vision | free | tuned | 100.0 | 99.9 | 99.8 | 99.8 | 100.0 | 99.5 | 100.0 | 2.8 |
+| vision | free | *Δ* | **+100.0** | **+88.3** | **+99.8** | -0.2 | **+100.0** | **+99.5** | **+100.0** | +2.8 |
+
 ## Processing time
 
 Wall-clock per request against llama-server (Q4_K_M, RTX 3070 Ti, 4 slots kept
-busy, so requests share the GPU), all splits pooled. *Prefill tok*: prompt tokens
+busy, so requests share the GPU), clean and scanned splits pooled separately. *Prefill tok*: prompt tokens
 the server evaluated, excluding any prefix reused from its cache (vision includes
 the page images). *Out tok/s*: output tokens over
 the whole request latency, prefill included. *Speedup*: base mean / tuned mean.
 
-| modality | mode | model | n | mean s | p50 s | p95 s | prefill tok | out tok | out tok/s | speedup |
-|---|---|---|--:|--:|--:|--:|--:|--:|--:|--:|
-| text | grammar | base | 1412 | 8.84 | 8.61 | 12.52 | 327 | 530 | 60.0 | -- |
-| text | grammar | tuned | 1412 | 5.63 | 5.45 | 8.18 | 331 | 343 | 61.0 | 1.57x |
-| text | free | base | 1412 | 8.10 | 7.89 | 11.67 | 328 | 492 | 60.7 | -- |
-| text | free | tuned | 1412 | 5.62 | 5.44 | 8.18 | 329 | 343 | 61.1 | 1.44x |
-| vision | grammar | base | 1412 | 11.22 | 10.91 | 15.57 | 1470 | 525 | 46.8 | -- |
-| vision | grammar | tuned | 1412 | 7.61 | 7.44 | 10.88 | 1478 | 345 | 45.3 | 1.47x |
-| vision | free | base | 1412 | 10.17 | 10.02 | 14.32 | 1478 | 487 | 47.9 | -- |
-| vision | free | tuned | 1412 | 7.61 | 7.44 | 10.88 | 1478 | 345 | 45.3 | 1.34x |
+| input | modality | mode | model | n | mean s | p50 s | p95 s | prefill tok | out tok | out tok/s | speedup |
+|---|---|---|---|--:|--:|--:|--:|--:|--:|--:|--:|
+| clean | text | grammar | base | 1412 | 8.84 | 8.61 | 12.52 | 327 | 530 | 60.0 | -- |
+| clean | text | grammar | tuned | 1412 | 5.63 | 5.45 | 8.18 | 331 | 343 | 61.0 | 1.57x |
+| clean | text | free | base | 1412 | 8.10 | 7.89 | 11.67 | 328 | 492 | 60.7 | -- |
+| clean | text | free | tuned | 1412 | 5.62 | 5.44 | 8.18 | 329 | 343 | 61.1 | 1.44x |
+| clean | vision | grammar | base | 1412 | 11.22 | 10.91 | 15.57 | 1470 | 525 | 46.8 | -- |
+| clean | vision | grammar | tuned | 1412 | 7.61 | 7.44 | 10.88 | 1478 | 345 | 45.3 | 1.47x |
+| clean | vision | free | base | 1412 | 10.17 | 10.02 | 14.32 | 1478 | 487 | 47.9 | -- |
+| clean | vision | free | tuned | 1412 | 7.61 | 7.44 | 10.88 | 1478 | 345 | 45.3 | 1.34x |
+| scan | text | grammar | base | 1412 | 1.44 | 1.45 | 1.53 | 4 | 78 | 54.2 | -- |
+| scan | text | grammar | tuned | 1412 | 4.05 | 4.06 | 4.08 | 4 | 279 | 68.9 | 0.36x |
+| scan | text | free | base | 1412 | 1.51 | 1.92 | 2.11 | 4 | 83 | 54.9 | -- |
+| scan | text | free | tuned | 1412 | 0.71 | 0.71 | 0.75 | 4 | 48 | 67.6 | 2.13x |
+| scan | vision | grammar | base | 1412 | 11.06 | 10.73 | 15.30 | 1473 | 524 | 47.4 | -- |
+| scan | vision | grammar | tuned | 1412 | 7.51 | 7.32 | 10.69 | 1478 | 345 | 45.9 | 1.47x |
+| scan | vision | free | base | 1412 | 9.96 | 9.72 | 13.99 | 1478 | 483 | 48.5 | -- |
+| scan | vision | free | tuned | 1412 | 7.51 | 7.31 | 10.70 | 1478 | 345 | 46.0 | 1.33x |
 
 ## Scalar fields
 
@@ -143,6 +192,22 @@ the whole request latency, prefill included. *Speedup*: base mean / tuned mean.
 | test_seen | vision | base | grammar | 99.6 | 96.9 | 100.0 | 83.1 | 100.0 | 98.2 |
 | test_seen | vision | tuned | free | 100.0 | 100.0 | 100.0 | 99.6 | 100.0 | 100.0 |
 | test_seen | vision | tuned | grammar | 100.0 | 100.0 | 100.0 | 99.6 | 100.0 | 100.0 |
+| test_unseen_scan | text | base | free | 0.0 | 5.1 | 9.2 | 0.0 | 0.0 | 60.2 |
+| test_unseen_scan | text | base | grammar | 0.0 | 5.1 | 9.2 | 0.0 | 0.0 | 60.2 |
+| test_unseen_scan | text | tuned | free | 0.0 | 5.1 | 9.2 | 0.0 | 0.0 | 60.2 |
+| test_unseen_scan | text | tuned | grammar | 0.0 | 0.0 | 0.0 | 6.2 | 20.7 | 0.0 |
+| test_unseen_scan | vision | base | free | 0.1 | 5.2 | 9.3 | 0.0 | 0.0 | 60.2 |
+| test_unseen_scan | vision | base | grammar | 99.7 | 97.6 | 99.9 | 85.5 | 99.9 | 98.4 |
+| test_unseen_scan | vision | tuned | free | 99.8 | 99.3 | 99.7 | 99.3 | 99.7 | 99.7 |
+| test_unseen_scan | vision | tuned | grammar | 100.0 | 99.5 | 99.9 | 99.4 | 99.9 | 99.9 |
+| test_seen_scan | text | base | free | 0.0 | 2.7 | 8.4 | 0.0 | 0.0 | 58.7 |
+| test_seen_scan | text | base | grammar | 0.0 | 2.7 | 8.4 | 0.0 | 0.0 | 58.7 |
+| test_seen_scan | text | tuned | free | 0.0 | 2.7 | 8.4 | 0.0 | 0.0 | 58.7 |
+| test_seen_scan | text | tuned | grammar | 0.0 | 0.0 | 0.0 | 7.1 | 21.8 | 0.0 |
+| test_seen_scan | vision | base | free | 0.0 | 2.7 | 8.4 | 0.0 | 0.0 | 58.7 |
+| test_seen_scan | vision | base | grammar | 99.6 | 97.3 | 99.1 | 80.4 | 100.0 | 98.7 |
+| test_seen_scan | vision | tuned | free | 100.0 | 100.0 | 100.0 | 99.6 | 100.0 | 100.0 |
+| test_seen_scan | vision | tuned | grammar | 100.0 | 100.0 | 100.0 | 99.6 | 100.0 | 100.0 |
 
 ## Format failures
 
@@ -164,8 +229,26 @@ the whole request latency, prefill included. *Speedup*: base mean / tuned mean.
 | test_seen | vision | base | grammar | -- |
 | test_seen | vision | tuned | free | -- |
 | test_seen | vision | tuned | grammar | -- |
+| test_unseen_scan | text | base | free | schema_violation: 1187 |
+| test_unseen_scan | text | base | grammar | -- |
+| test_unseen_scan | text | tuned | free | schema_violation: 1187 |
+| test_unseen_scan | text | tuned | grammar | -- |
+| test_unseen_scan | vision | base | free | code_fence: 44, schema_violation: 1142 |
+| test_unseen_scan | vision | base | grammar | -- |
+| test_unseen_scan | vision | tuned | free | schema_violation: 2 |
+| test_unseen_scan | vision | tuned | grammar | -- |
+| test_seen_scan | text | base | free | schema_violation: 225 |
+| test_seen_scan | text | base | grammar | -- |
+| test_seen_scan | text | tuned | free | schema_violation: 225 |
+| test_seen_scan | text | tuned | grammar | -- |
+| test_seen_scan | vision | base | free | code_fence: 17, schema_violation: 208 |
+| test_seen_scan | vision | base | grammar | -- |
+| test_seen_scan | vision | tuned | free | -- |
+| test_seen_scan | vision | tuned | grammar | -- |
 
 ## Per template (grammar mode)
+
+Clean splits only.
 
 | template | modality | model | n | scalars | exp F1 | exp dates | edu F1 |
 |---|---|---|--:|--:|--:|--:|--:|

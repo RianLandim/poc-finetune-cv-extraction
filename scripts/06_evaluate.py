@@ -1,5 +1,6 @@
 #!/usr/bin/env python
-"""Stage 6 -- score base or tuned on test_seen, test_unseen (and, in phase 4, real_test).
+"""Stage 6 -- score base or tuned on test_seen, test_unseen, their scanned variants (and, in
+phase 4, real_test).
 
 Owns the server lifecycle: starts scripts/05_serve.sh with the model's GGUF, checks via
 GET /props that the server loaded exactly that file, scores, stops it. Base and tuned are
@@ -12,6 +13,10 @@ Each model is scored twice (ADR 0007):
 
 A generation that does not parse is scored against an empty resume, so format failures
 count as wrong fields rather than vanishing from the averages.
+
+Hallucination is always checked against the clean PDF's extracted text, also on the
+``*_scan`` splits: a scan does not change what the resume says, only what the model sees.
+A split whose jsonl is missing (dataset built before ``scan_test``) is skipped with a note.
 
 Vision requests send the page PNGs as base64 ``multimodal_data`` and the prompt through
 cvx.prompt.to_server_prompt with the server's media marker from GET /props. The pages are
@@ -141,7 +146,8 @@ def main() -> int:
     parser.add_argument("--which", choices=("base", "tuned"), required=True)
     parser.add_argument("--data-config", default="configs/data.yaml")
     parser.add_argument("--smoke", action="store_true", help="evaluate the smoke run")
-    parser.add_argument("--splits", default="test_seen,test_unseen")
+    parser.add_argument("--splits",
+                        default="test_seen,test_unseen,test_seen_scan,test_unseen_scan")
     parser.add_argument("--modes", default=",".join(MODES))
     parser.add_argument("--limit", type=int, default=None, help="first N rows per split")
     parser.add_argument("--port", type=int, default=8080)
@@ -180,6 +186,10 @@ def main() -> int:
     cvs_dir = Path(data.paths.cvs_dir) / run
     jobs = []
     for split in args.splits.split(","):
+        if not (data_dir / f"{split}.jsonl").exists():
+            print(f">> skipping {split}: no {data_dir / split}.jsonl (rebuild with `make build`)",
+                  flush=True)
+            continue
         rows = load_rows(data_dir / f"{split}.jsonl")[: args.limit]
         for row in rows:
             # Text prompts carry no image block; vision swaps it for the media marker below.

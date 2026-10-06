@@ -7,8 +7,11 @@ Every page is resized here to a multiple of ``ALIGN`` px (patch 16 x merge 2) wi
 ``max_pixels``, so neither the HF processor (smart_resize) nor llama.cpp's mtmd resizes
 it again: both see the same pixels and produce the same number of image tokens.
 
-Augmentation (slight rotation, blur, JPEG artefacts, tinted paper, noise) applies to
-TRAIN only and is deterministic per (seed, resume, page). The test set is rendered clean.
+Augmentation (slight rotation, blur, JPEG artefacts, tinted paper, noise) is deterministic
+per (seed, resume, page). It applies to a share of TRAIN rows, and to every resume of the
+scanned test variant (``*_scan`` splits, ADR 0006); the plain test splits stay clean.
+``scan_pdf`` wraps scan pages in an image-only PDF -- what the text path sees when a
+resume was printed and scanned.
 """
 
 from __future__ import annotations
@@ -114,3 +117,17 @@ def pdf_to_pages(pdf: Path, n_pages: int, dpi: int, max_pixels: int, augment: bo
         img.save(tmp, format="PNG")
         tmp.replace(path)  # a crash never leaves a truncated page behind
     return paths
+
+
+def scan_pdf(pages: list[Path], out: Path, dpi: int) -> Path:
+    """An image-only PDF of the given (scan) pages, no text layer (idempotent)."""
+    from PIL import Image
+
+    if out.exists():
+        return out
+    images = [Image.open(p).convert("RGB") for p in pages]
+    tmp = out.with_suffix(".tmp.pdf")
+    images[0].save(tmp, format="PDF", resolution=float(dpi), save_all=True,
+                   append_images=images[1:])
+    tmp.replace(out)
+    return out

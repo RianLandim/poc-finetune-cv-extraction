@@ -28,7 +28,7 @@ Every stage script and `generate/*` is a stub naming its phase:
 2. ~~20 templates, full Qwen3.5-4B text run, eval + report~~ — done 2026-10-02, see
    [`docs/RESULTS.md`](docs/RESULTS.md) (probe: [`docs/probe/2026-10-01-templates.md`](docs/probe/2026-10-01-templates.md)).
 3. ~~Vision path~~ — done 2026-10-02, results in [`docs/RESULTS.md`](docs/RESULTS.md).
-   Still open: the scanned test variant (ADR 0006); train already sees scan augmentation.
+   Scanned test variant (ADR 0006) added 2026-10-05: `test_{seen,unseen}_scan` splits.
 4. Real test set and final report.
 
 ## Hardware and environment
@@ -106,6 +106,10 @@ resumes; run it before any multi-hour training run. `make test` for the fast sui
 - **Training needs `mm_token_type_ids`** from the processor, or the model refuses to
   compute M-RoPE.
 - The vision base GGUF is byte-identical to the text base: one base, two LoRAs (ADR 0012).
+- **The scanned test variant is built by `make build`** (`scan_test` in `configs/data.yaml`):
+  same test resumes through `scan_like`, the same function and distribution as the train
+  augmentation. The text arm gets the extractor's output on an image-only PDF -- empty,
+  there is no OCR. Hallucination on `*_scan` is still checked against the clean text.
 
 ## Operational gotchas carried over from the persona repo
 

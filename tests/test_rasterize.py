@@ -4,7 +4,9 @@ import numpy as np
 import pytest
 from PIL import Image, ImageDraw
 
-from cvx.generate.rasterize import ALIGN, aligned_size, image_tokens, pdf_to_pages, scan_like
+from cvx.generate.extract_text import pdf_to_text
+from cvx.generate.rasterize import (ALIGN, aligned_size, image_tokens, pdf_to_pages, scan_like,
+                                   scan_pdf)
 from cvx.generate.render import render_pdf, sample_style
 
 
@@ -44,3 +46,15 @@ def test_pdf_to_pages_writes_aligned_pngs_once(tmp_path, cv):
     assert pages[0].stat().st_mtime_ns == mtime  # idempotent: not re-rendered
     scan = pdf_to_pages(pdf, n, 120, 1_400_000, True, 3407)
     assert scan[0].name == "cv_000001-p1-scan.png" and Image.open(scan[0]).size == (992, 1408)
+
+
+def test_scan_pdf_has_the_pages_and_no_text_layer(tmp_path, cv):
+    pdf = tmp_path / "cv_000001.pdf"
+    n = render_pdf(cv, sample_style("classico", 3407, "x"), pdf)
+    assert cv.nome in pdf_to_text(pdf)
+    pages = pdf_to_pages(pdf, n, 120, 1_400_000, True, 3407)
+    out = scan_pdf(pages, tmp_path / "cv_000001-scan.pdf", dpi=120)
+    import pypdfium2 as pdfium
+
+    assert len(pdfium.PdfDocument(str(out))) == n
+    assert pdf_to_text(out) == ""  # what the text path gets from a scanned resume

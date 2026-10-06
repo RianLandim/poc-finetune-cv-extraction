@@ -23,7 +23,7 @@ from cvx.config import load_data_config  # noqa: E402
 from cvx.metrics import SCALARS  # noqa: E402
 
 LISTS = ("experiencias", "experiencia_datas", "formacao", "habilidades", "idiomas")
-SPLIT_ORDER = ("real_test", "test_unseen", "test_seen")
+SPLIT_ORDER = ("real_test", "test_unseen", "test_seen", "test_unseen_scan", "test_seen_scan")
 
 
 def f1(tp: int, fp: int, fn: int) -> float:
@@ -154,6 +154,26 @@ def main() -> int:
     modalities = sorted({k[1] for k in keys})
     headline = splits[0]
 
+    def summary(split: str) -> list[str]:
+        out = ["| modality | JSON ok | scalars | exp F1 | edu F1 | skills F1 | halluc. | s/req |",
+               "|---|--:|--:|--:|--:|--:|--:|--:|"]
+        for mod in modalities:
+            b, t = aggs.get((split, mod, "base", "grammar")), aggs.get((split, mod, "tuned", "grammar"))
+            if not (b and t):
+                continue
+
+            def cell(old: str, new: str, better: bool) -> str:
+                return f"{old} → **{new}**" if better else f"{old} → {new}"
+
+            cells = [cell(pct(b[k]), pct(t[k]), round(100 * t[k], 1) > round(100 * b[k], 1))
+                     for k in ("json_ok", "scalars", "experiencias", "formacao", "habilidades")]
+            cells.append(cell(pct(b["halluc"]), pct(t["halluc"]),
+                              round(100 * t["halluc"], 1) < round(100 * b["halluc"], 1)))
+            cells.append(cell(f"{b['latency_s']:.1f}", f"{t['latency_s']:.1f}",
+                              t["latency_s"] < b["latency_s"]))
+            out.append(f"| {mod} | " + " | ".join(cells) + " |")
+        return out
+
     lines = [
         f"# Results -- run `{run}`",
         "",
@@ -171,23 +191,13 @@ def main() -> int:
         f"`{headline}`, grammar-constrained decoding (the production setting); "
         "`real_test` is the headline when present. Base → tuned.",
         "",
-        "| modality | JSON ok | scalars | exp F1 | edu F1 | skills F1 | halluc. | s/req |",
-        "|---|--:|--:|--:|--:|--:|--:|--:|",
     ]
-    for mod in modalities:
-        b, t = aggs.get((headline, mod, "base", "grammar")), aggs.get((headline, mod, "tuned", "grammar"))
-        if not (b and t):
-            continue
-        def cell(old: str, new: str, better: bool) -> str:
-            return f"{old} → **{new}**" if better else f"{old} → {new}"
-
-        cells = [cell(pct(b[k]), pct(t[k]), round(100 * t[k], 1) > round(100 * b[k], 1))
-                 for k in ("json_ok", "scalars", "experiencias", "formacao", "habilidades")]
-        cells.append(cell(pct(b["halluc"]), pct(t["halluc"]),
-                          round(100 * t["halluc"], 1) < round(100 * b["halluc"], 1)))
-        cells.append(cell(f"{b['latency_s']:.1f}", f"{t['latency_s']:.1f}",
-                          t["latency_s"] < b["latency_s"]))
-        lines.append(f"| {mod} | " + " | ".join(cells) + " |")
+    lines += summary(headline)
+    scan_split = f"{headline}_scan"
+    if scan_split in splits:
+        lines += ["", f"Scanned variant (`{scan_split}`): the same resumes printed and scanned "
+                  "(ADR 0006). The text arm reads whatever the extractor finds in the "
+                  "image-only PDF.", "", *summary(scan_split)]
 
     lines += training_section(run)
 
@@ -211,18 +221,21 @@ def main() -> int:
 
     lines += ["", "## Processing time", "",
               "Wall-clock per request against llama-server (Q4_K_M, RTX 3070 Ti, 4 slots kept",
-              "busy, so requests share the GPU), all splits pooled. *Prefill tok*: prompt tokens",
+              "busy, so requests share the GPU), clean and scanned splits pooled separately. *Prefill tok*: prompt tokens",
               "the server evaluated, excluding any prefix reused from its cache (vision includes",
               "the page images). *Out tok/s*: output tokens over",
               "the whole request latency, prefill included. *Speedup*: base mean / tuned mean.",
               "",
-              "| modality | mode | model | n | mean s | p50 s | p95 s | prefill tok | out tok "
-              "| out tok/s | speedup |",
-              "|---|---|---|--:|--:|--:|--:|--:|--:|--:|--:|"]
-    for mod in modalities:
-        for mode in ("grammar", "free"):
-            pooled = {w: [r for k in keys if k[1:] == (mod, w, mode) for r in groups[k]]
-                      for w in ("base", "tuned")}
+              "| input | modality | mode | model | n | mean s | p50 s | p95 s | prefill tok "
+              "| out tok | out tok/s | speedup |",
+              "|---|---|---|---|--:|--:|--:|--:|--:|--:|--:|--:|"]
+    inputs = [("clean", lambda sp: not sp.endswith("_scan"))]
+    if any(sp.endswith("_scan") for sp in splits):
+        inputs.append(("scan", lambda sp: sp.endswith("_scan")))
+    for (source, keep), mod, mode in ((i, m, md) for i in inputs for m in modalities
+                                      for md in ("grammar", "free")):
+            pooled = {w: [r for k in keys if k[1:] == (mod, w, mode) and keep(k[0])
+                          for r in groups[k]] for w in ("base", "tuned")}
             mean = {w: sum(r["latency_s"] for r in rs) / len(rs) for w, rs in pooled.items() if rs}
             for which, rows in pooled.items():
                 if not rows:
@@ -233,7 +246,7 @@ def main() -> int:
                 speed = (f"{mean['base'] / mean['tuned']:.2f}x"
                          if which == "tuned" and "base" in mean else "--")
                 lines.append("| " + " | ".join([
-                    mod, mode, which, str(len(rows)), f"{mean[which]:.2f}",
+                    source, mod, mode, which, str(len(rows)), f"{mean[which]:.2f}",
                     f"{quantile(lat, 0.5):.2f}", f"{quantile(lat, 0.95):.2f}", f"{prefill:.0f}",
                     f"{outn:.0f}", f"{sum(r['predicted_n'] for r in rows) / sum(lat):.1f}",
                     speed]) + " |")
@@ -252,10 +265,10 @@ def main() -> int:
 
     by_template: dict[tuple, list[dict]] = collections.defaultdict(list)
     for (split, modality, which, mode), rows in groups.items():
-        if mode == "grammar":
+        if mode == "grammar" and not split.endswith("_scan"):
             for r in rows:
                 by_template[(r["template"], modality, which)].append(r)
-    lines += ["", "## Per template (grammar mode)", "",
+    lines += ["", "## Per template (grammar mode)", "", "Clean splits only.", "",
               "| template | modality | model | n | scalars | exp F1 | exp dates | edu F1 |",
               "|---|---|---|--:|--:|--:|--:|--:|"]
     for k in sorted(by_template, key=lambda k: (k[0], k[1], k[2] != "base")):

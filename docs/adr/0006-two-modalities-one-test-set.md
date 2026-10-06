@@ -32,3 +32,12 @@ turn differs (`cvx.prompt.messages`).
 
 - **Qwen3-8B text.** Already at the VRAM limit with 1536 tokens in the persona repo; a
   resume needs ~4k. See ADR 0008.
+
+## Addendum 2026-10-05 — the scanned variant
+
+`test_seen_scan` / `test_unseen_scan` hold the same resumes as `test_seen` / `test_unseen`,
+every page through `cvx.generate.rasterize.scan_like` (tinted paper, ~1° rotation, blur,
+noise, JPEG) -- the same distribution as the train augmentation, on resumes never trained
+on. The text arm reads what `pdf_to_text` extracts from an image-only PDF of those pages:
+nothing, since the pipeline has no OCR. That is the honest number for a scanned resume
+fed to the text path, not a straw man; an OCR step would be a third arm.
